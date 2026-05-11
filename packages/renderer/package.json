@@ -1,0 +1,21 @@
+{
+  "name": "@electron-tab-drag/renderer",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "react": "^19.1",
+    "react-dom": "^19.1",
+    "react-mosaic-component": "7.0.0-beta0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1",
+    "@types/react-dom": "^19.1",
+    "@vitejs/plugin-react": "^4.4",
+    "typescript": "^5.8",
+    "vite": "^6.3"
+  }
+}

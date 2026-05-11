@@ -1,0 +1,17 @@
+{
+  "name": "@electron-tab-drag/main",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsup",
+    "dev": "node ../../node_modules/electron/cli.js ."
+  },
+  "devDependencies": {
+    "tsup": "^8.4",
+    "typescript": "^5.8"
+  },
+  "dependencies": {
+    "electron": "^37.10.3"
+  }
+}
