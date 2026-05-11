@@ -7,8 +7,13 @@ const electron = window.electronAPI;
 export function App(): React.ReactElement | null {
   const [windowId, setWindowId] = useState<number>(-1);
   const [state, setState] = useState<WindowStateFromMain | undefined>(undefined);
+  const [error, setError] = useState<string | undefined>(undefined);
 
   useEffect(() => {
+    if (electron === undefined) {
+      setError("electronAPI not available — preload script did not load");
+      return;
+    }
     const id = electron.getWindowId();
     setWindowId(id);
     const initial = electron.getInitialState();
@@ -34,6 +39,10 @@ export function App(): React.ReactElement | null {
     },
     [state, windowId],
   );
+
+  if (error !== undefined) {
+    return <div style={{ padding: 20, color: "#c75d5d" }}>Error: {error}</div>;
+  }
 
   if (state === undefined) {
     return <div style={{ padding: 20, color: "#a6adc8" }}>Loading…</div>;
