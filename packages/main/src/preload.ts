@@ -33,11 +33,13 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.send("tab-moved-intra", data);
   },
 
-  dragTabStart: (data) => {
-    ipcRenderer.send("drag-tab-start", data);
+  /** Renderer tells main process a cross-window drag has begun. */
+  tabDragBegin: (data) => {
+    ipcRenderer.send("tab-drag-begin", data);
   },
 
-  dragTabEnd: (completed) => {
-    ipcRenderer.send("drag-tab-end", completed);
+  /** Renderer tells main process the cross-window drag ended. */
+  tabDragEnd: (completed) => {
+    ipcRenderer.send("tab-drag-end", completed);
   },
 });

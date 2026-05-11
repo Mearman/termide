@@ -8,12 +8,14 @@ export interface ElectronAPI {
   onDragEnter: (callback: (data: { tabId: string }) => void) => () => void;
   onDragLeave: (callback: () => void) => () => void;
   tabMovedIntra: (data: { windowId: number; layout: LayoutNode }) => void;
-  dragTabStart: (data: {
+  tabDragBegin: (data: {
     windowId: number;
     tabId: string;
+    tabTitle: string;
+    tabColour: string;
     tabBounds: { x: number; y: number; width: number; height: number };
   }) => void;
-  dragTabEnd: (completed: boolean) => void;
+  tabDragEnd: (completed: boolean) => void;
 }
 
 declare global {
@@ -22,7 +24,6 @@ declare global {
   }
 }
 
-// Re-export the shared types from main (in a real app these would be a shared package)
 export interface Tab {
   id: string;
   title: string;

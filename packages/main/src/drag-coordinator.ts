@@ -1,9 +1,16 @@
 /**
  * Cross-window tab drag coordination.
  *
- * Tracks the global cursor during an active tab drag and identifies
- * which (if any) other window the cursor is over. Returns results
- * to the caller — does not create windows or push state itself.
+ * When the renderer starts a tab drag (HTML5 DnD), it notifies the main process
+ * via tab-drag-begin. The main process starts polling the cursor position.
+ *
+ * If the drag stays within the same window, HTML5 DnD handles it — the renderer
+ * calls tab-drag-end with completed=false and nothing happens.
+ *
+ * If the drag leaves the window (dragend fires with dropEffect "none"),
+ * the renderer calls tab-drag-end with completed=true. The main process checks
+ * where the cursor is and either moves the tab to another window or creates a
+ * new one.
  */
 import { screen, BrowserWindow } from "electron";
 import type { DragTabStartPayload } from "./types.ts";
@@ -11,68 +18,106 @@ import type { DragTabStartPayload } from "./types.ts";
 interface ActiveDrag {
   sourceWindowId: number;
   tabId: string;
-  currentTargetWindowId: number | undefined;
-  interval: ReturnType<typeof setInterval>;
+  targetWindowId: number | undefined;
+  pollInterval: ReturnType<typeof setInterval>;
 }
 
 let activeDrag: ActiveDrag | undefined;
 
-export function startDrag(payload: DragTabStartPayload): void {
+export type DragCompletionHandler = (result: DragResult) => void;
+
+export interface DragResult {
+  tabId: string;
+  sourceWindowId: number;
+  targetWindowId: number | undefined;
+  cursorPosition: { x: number; y: number };
+}
+
+/**
+ * Begin tracking cursor for a potential cross-window drag.
+ */
+export function startDrag(
+  payload: DragTabStartPayload,
+  onComplete: DragCompletionHandler,
+): void {
   if (activeDrag !== undefined) {
-    endDrag(false);
+    cancelDrag();
   }
 
-  const interval = setInterval(tick, 16); // ~60fps
+  const pollInterval = setInterval(() => tick(), 16);
   activeDrag = {
     sourceWindowId: payload.windowId,
     tabId: payload.tabId,
-    currentTargetWindowId: undefined,
-    interval,
+    targetWindowId: undefined,
+    pollInterval,
+    onComplete,
   };
 }
 
-export interface DragResult {
-  /** The tab that was being dragged. */
-  tabId: string;
-  /** The window the drag started from. */
-  sourceWindowId: number;
-  /** The window the tab was dropped on, if any. */
-  targetWindowId: number | undefined;
-}
+/**
+ * Renderer reports the drag ended.
+ * If completed=true, the drag left the window — handle cross-window drop.
+ */
+export function endDrag(completed: boolean): void {
+  if (activeDrag === undefined) return;
 
-export function endDrag(completed: boolean): DragResult | undefined {
-  if (activeDrag === undefined) return undefined;
+  if (!completed) {
+    // Intra-window drag — just clean up
+    teardown();
+    return;
+  }
 
-  clearInterval(activeDrag.interval);
-
+  // Cross-window drag — figure out where the cursor is
+  const cursor = screen.getCursorScreenPoint();
   const result: DragResult = {
     tabId: activeDrag.tabId,
     sourceWindowId: activeDrag.sourceWindowId,
     targetWindowId: activeDrag.currentTargetWindowId,
+    cursorPosition: cursor,
   };
 
-  // Clear visual state on all windows
+  const handler = activeDrag.onComplete;
+  teardown();
+
+  // Notify all windows that the drag ended
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) {
       win.webContents.send("drag-leave");
     }
   }
 
-  activeDrag = undefined;
-
-  return completed ? result : undefined;
+  handler(result);
 }
 
+function cancelDrag(): void {
+  teardown();
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) {
+      win.webContents.send("drag-leave");
+    }
+  }
+}
+
+function teardown(): void {
+  if (activeDrag === undefined) return;
+  clearInterval(activeDrag.pollInterval);
+  activeDrag = undefined;
+}
+
+/**
+ * Poll cursor and detect which non-source window the cursor is over.
+ */
 function tick(): void {
   if (activeDrag === undefined) return;
 
   const cursor = screen.getCursorScreenPoint();
   const windows = BrowserWindow.getAllWindows();
 
-  let foundTarget: BrowserWindow | undefined;
+  let newTargetId: number | undefined;
   for (const win of windows) {
     if (win.isDestroyed()) continue;
     if (win.id === activeDrag.sourceWindowId) continue;
+
     const bounds = win.getBounds();
     if (
       cursor.x >= bounds.x &&
@@ -80,23 +125,26 @@ function tick(): void {
       cursor.y >= bounds.y &&
       cursor.y <= bounds.y + bounds.height
     ) {
-      foundTarget = win;
+      newTargetId = win.id;
       break;
     }
   }
-
-  const newTargetId = foundTarget?.id;
 
   if (newTargetId !== activeDrag.currentTargetWindowId) {
     // Leave old target
     if (activeDrag.currentTargetWindowId !== undefined) {
       const oldWin = BrowserWindow.fromId(activeDrag.currentTargetWindowId);
-      oldWin?.webContents.send("drag-leave");
+      if (oldWin !== null && !oldWin.isDestroyed()) {
+        oldWin.webContents.send("drag-leave");
+      }
     }
 
     // Enter new target
     if (newTargetId !== undefined) {
-      foundTarget?.webContents.send("drag-enter", { tabId: activeDrag.tabId });
+      const newWin = BrowserWindow.fromId(newTargetId);
+      if (newWin !== null && !newWin.isDestroyed()) {
+        newWin.webContents.send("drag-enter", { tabId: activeDrag.tabId });
+      }
     }
 
     activeDrag.currentTargetWindowId = newTargetId;

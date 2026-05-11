@@ -72,6 +72,8 @@ export interface TabMovedIntraPayload {
 export interface DragTabStartPayload {
   windowId: number;
   tabId: string;
+  tabTitle: string;
+  tabColour: string;
   tabBounds: { x: number; y: number; width: number; height: number };
 }
 

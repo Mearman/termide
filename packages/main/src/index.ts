@@ -5,7 +5,7 @@ import { app, BrowserWindow, ipcMain, screen } from "electron";
 import { createMainWindow, createWindowWithTab } from "./window-manager.ts";
 import { appState, updateWindowLayout, moveTabCrossWindow } from "./state.ts";
 import { startDrag, endDrag } from "./drag-coordinator.ts";
-import type { DragTabStartPayload, TabMovedIntraPayload } from "./types.ts";
+import type { TabMovedIntraPayload, DragTabStartPayload } from "./types.ts";
 
 // ─── IPC handlers ─────────────────────────────────────────
 
@@ -23,17 +23,24 @@ ipcMain.on("tab-moved-intra", (_event, payload: TabMovedIntraPayload): void => {
   updateWindowLayout(payload.windowId, payload.layout);
 });
 
-ipcMain.on("drag-tab-start", (_event, payload: DragTabStartPayload): void => {
-  startDrag(payload);
+ipcMain.on("tab-drag-begin", (_event, payload: DragTabStartPayload): void => {
+  startDrag(payload, handleDragComplete);
 });
 
-ipcMain.on("drag-tab-end", (_event, completed: boolean): void => {
-  const result = endDrag(completed);
-  if (result === undefined) return;
+ipcMain.on("tab-drag-end", (_event, completed: boolean): void => {
+  endDrag(completed);
+});
 
+// ─── Drag completion (cross-window) ───────────────────────
+
+function handleDragComplete(result: {
+  tabId: string;
+  sourceWindowId: number;
+  targetWindowId: number | undefined;
+  cursorPosition: { x: number; y: number };
+}): void {
   if (result.targetWindowId !== undefined) {
-    // Drop on existing window
-      const affected = moveTabCrossWindow(
+    const affected = moveTabCrossWindow(
       result.tabId,
       result.sourceWindowId,
       result.targetWindowId,
@@ -41,16 +48,18 @@ ipcMain.on("drag-tab-end", (_event, completed: boolean): void => {
     );
     pushStateToWindows(affected.affectedWindows);
   } else {
-    // Drop in empty space → create new window
-    const cursor = screen.getCursorScreenPoint();
-    const newWin = createWindowWithTab(result.tabId, result.sourceWindowId, cursor);
+    const newWin = createWindowWithTab(
+      result.tabId,
+      result.sourceWindowId,
+      result.cursorPosition,
+    );
     if (newWin !== undefined) {
       pushStateToWindows([result.sourceWindowId, newWin.id]);
     } else {
       pushStateToWindows([result.sourceWindowId]);
     }
   }
-});
+}
 
 // ─── Helpers ──────────────────────────────────────────────
 

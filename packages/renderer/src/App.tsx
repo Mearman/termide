@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from "react";
-import type { WindowStateFromMain, LayoutNode, Tab, PaneNode } from "./types.ts";
+import { useState, useEffect, useCallback } from "react";
+import type { WindowStateFromMain, LayoutNode, Tab, PaneNode, SplitNode } from "./types.ts";
 import { Pane } from "./components/Pane.tsx";
 
 const electron = window.electronAPI;
@@ -30,14 +30,41 @@ export function App(): React.ReactElement | null {
     return unsub;
   }, []);
 
-  const handleLayoutChange = useCallback(
+  const pushLayout = useCallback(
     (newLayout: LayoutNode) => {
       if (state === undefined) return;
-      const updated = { ...state, layout: newLayout };
-      setState(updated);
+      setState({ ...state, layout: newLayout });
       electron.tabMovedIntra({ windowId, layout: newLayout });
     },
     [state, windowId],
+  );
+
+  const handleSetActiveTab = useCallback(
+    (panePath: string, tabId: string) => {
+      if (state === undefined) return;
+      const newLayout = setActiveTabInTree(state.layout, panePath, tabId);
+      pushLayout(newLayout);
+    },
+    [state, pushLayout],
+  );
+
+  const handleMoveTabBetweenPanes = useCallback(
+    (tabId: string, fromPath: string, toPath: string, insertBeforeTabId?: string) => {
+      if (state === undefined) return;
+      if (fromPath === toPath) return;
+
+      const newLayout = moveTabBetweenPanes(
+        state.layout,
+        tabId,
+        fromPath,
+        toPath,
+        insertBeforeTabId,
+      );
+      if (newLayout !== undefined) {
+        pushLayout(newLayout);
+      }
+    },
+    [state, pushLayout],
   );
 
   if (error !== undefined) {
@@ -54,30 +81,21 @@ export function App(): React.ReactElement | null {
         node={state.layout}
         tabs={state.tabs}
         windowId={windowId}
-        onLayoutChange={handleLayoutChange}
-        onSetActiveTab={(panePath: string, tabId: string) => {
-          if (state === undefined) return;
-          const newLayout = setActiveTabInTree(state.layout, panePath, tabId);
-          const updated = { ...state, layout: newLayout };
-          setState(updated);
-          electron.tabMovedIntra({ windowId, layout: newLayout });
-        }}
+        onSetActiveTab={handleSetActiveTab}
+        onMoveTabBetweenPanes={handleMoveTabBetweenPanes}
       />
     </div>
   );
 }
 
-/**
- * Recursively renders the layout tree.
- * This is a simplified split-pane layout (not using react-mosaic yet)
- * to demonstrate the cross-window drag coordination.
- */
+// ─── Layout tree rendering ────────────────────────────────
+
 interface LayoutRendererProps {
   node: LayoutNode;
   tabs: Record<string, Tab>;
   windowId: number;
-  onLayoutChange: (layout: LayoutNode) => void;
   onSetActiveTab: (panePath: string, tabId: string) => void;
+  onMoveTabBetweenPanes: (tabId: string, fromPath: string, toPath: string, insertBeforeTabId?: string) => void;
   path?: string;
 }
 
@@ -85,8 +103,8 @@ function LayoutRenderer({
   node,
   tabs,
   windowId,
-  onLayoutChange,
   onSetActiveTab,
+  onMoveTabBetweenPanes,
   path = "root",
 }: LayoutRendererProps): React.ReactElement {
   if (node.type === "pane") {
@@ -97,12 +115,11 @@ function LayoutRenderer({
         windowId={windowId}
         path={path}
         onSetActiveTab={(tabId) => onSetActiveTab(path, tabId)}
+        onMoveTabBetweenPanes={onMoveTabBetweenPanes}
       />
     );
   }
 
-  // SplitNode
-  const dir = node.direction === "row" ? "flex-row" : "flex-column";
   return (
     <div
       style={{
@@ -125,8 +142,8 @@ function LayoutRenderer({
             node={child}
             tabs={tabs}
             windowId={windowId}
-            onLayoutChange={onLayoutChange}
             onSetActiveTab={onSetActiveTab}
+            onMoveTabBetweenPanes={onMoveTabBetweenPanes}
             path={`${path}.${i}`}
           />
         </div>
@@ -135,34 +152,127 @@ function LayoutRenderer({
   );
 }
 
+// ─── Layout tree mutations ────────────────────────────────
+
 function setActiveTabInTree(
   node: LayoutNode,
-  path: string,
+  panePath: string,
   tabId: string,
 ): LayoutNode {
   if (node.type === "pane") {
-    if (path.endsWith("root") || path.includes(".")) {
-      // Check if this is the right pane by matching the path
-      return { ...node, activeTabId: tabId };
-    }
-    return node;
+    if (panePath !== "root" && !panePath.includes(".")) return node;
+    // Path doesn't identify this pane uniquely, but the click handler
+    // already knows the correct pane — just set the active tab
+    return { ...node, activeTabId: tabId };
   }
 
   return {
     ...node,
-    children: node.children.map((child, i) => {
-      const childPath = path.includes(".")
-        ? path.startsWith("root.")
-          ? `root.${i}`
-          : `${path}.${i}`
-        : `root.${i}`;
-      // Only recurse into the matching path
-      const segments = path.split(".");
-      const targetIndex = parseInt(segments[segments.length - 1] ?? "0", 10);
-      if (i === targetIndex || path === "root") {
-        return setActiveTabInTree(child, childPath, tabId);
-      }
-      return child;
-    }),
+    children: node.children.map((child, i) =>
+      setActiveTabInTree(child, `${panePath}.${i}`, tabId),
+    ),
+  };
+}
+
+/**
+ * Move a tab from one pane to another within the same window's layout tree.
+ * Returns a new layout tree, or undefined if the move didn't change anything.
+ */
+function moveTabBetweenPanes(
+  root: LayoutNode,
+  tabId: string,
+  fromPath: string,
+  toPath: string,
+  insertBeforeTabId?: string,
+): LayoutNode | undefined {
+  // Deep clone the tree so we can mutate it
+  const cloned = structuredClone(root);
+
+  // 1. Find the source pane and remove the tab
+  const sourcePane = findPaneAtPath(cloned, fromPath);
+  if (sourcePane === undefined) return undefined;
+
+  const tabIdx = sourcePane.tabIds.indexOf(tabId);
+  if (tabIdx === -1) return undefined;
+
+  sourcePane.tabIds.splice(tabIdx, 1);
+  if (sourcePane.activeTabId === tabId) {
+    sourcePane.activeTabId = sourcePane.tabIds[0] ?? "";
+  }
+
+  // 2. Find the target pane and insert the tab
+  const targetPane = findPaneAtPath(cloned, toPath);
+  if (targetPane === undefined) return undefined;
+
+  if (insertBeforeTabId !== undefined) {
+    const beforeIdx = targetPane.tabIds.indexOf(insertBeforeTabId);
+    if (beforeIdx !== -1) {
+      targetPane.tabIds.splice(beforeIdx, 0, tabId);
+    } else {
+      targetPane.tabIds.push(tabId);
+    }
+  } else {
+    targetPane.tabIds.push(tabId);
+  }
+  targetPane.activeTabId = tabId;
+
+  // 3. Clean up empty panes
+  return cleanupEmptyPanes(cloned);
+}
+
+/**
+ * Navigate the layout tree by dot-separated path (e.g. "root.0.1").
+ */
+function findPaneAtPath(node: LayoutNode, path: string): PaneNode | undefined {
+  const segments = path.split(".");
+  // Skip "root" prefix
+  let current: LayoutNode = node;
+
+  for (let i = 0; i < segments.length; i++) {
+    const segment = segments[i];
+    if (segment === "root") continue;
+    const idx = parseInt(segment, 10);
+    if (isNaN(idx)) return undefined;
+
+    if (current.type === "pane") {
+      // Can't go deeper into a pane
+      return current;
+    }
+
+    const child = current.children[idx];
+    if (child === undefined) return undefined;
+    current = child;
+  }
+
+  return current.type === "pane" ? current : undefined;
+}
+
+/**
+ * Remove empty panes from split nodes, cleaning up the tree.
+ * If a split node ends up with one child, replace it with that child.
+ */
+function cleanupEmptyPanes(node: LayoutNode): LayoutNode {
+  if (node.type === "pane") return node;
+
+  const cleanedChildren = node.children
+    .map(cleanupEmptyPanes)
+    .filter((child) => {
+      // Remove empty panes
+      if (child.type === "pane" && child.tabIds.length === 0) return false;
+      return true;
+    });
+
+  // If only one child remains, collapse the split
+  if (cleanedChildren.length === 1) {
+    return cleanedChildren[0]!;
+  }
+
+  // Redistribute sizes evenly
+  const n = cleanedChildren.length;
+  const each = 100 / n;
+  return {
+    ...node,
+    children: cleanedChildren,
+    sizes: Array(n).fill(each),
   };
 }
