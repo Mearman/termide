@@ -48,6 +48,18 @@ export function App(): React.ReactElement | null {
     [state, pushLayout],
   );
 
+  const handleReorderTabs = useCallback(
+    (panePath: string, tabId: string, fromIndex: number, toIndex: number) => {
+      if (state === undefined) return;
+      if (fromIndex === toIndex) return;
+      const newLayout = reorderTabsInPane(state.layout, panePath, tabId, fromIndex, toIndex);
+      if (newLayout !== undefined) {
+        pushLayout(newLayout);
+      }
+    },
+    [state, pushLayout],
+  );
+
   const handleMoveTabBetweenPanes = useCallback(
     (tabId: string, fromPath: string, toPath: string, insertBeforeTabId?: string) => {
       if (state === undefined) return;
@@ -60,6 +72,28 @@ export function App(): React.ReactElement | null {
         toPath,
         insertBeforeTabId,
       );
+      if (newLayout !== undefined) {
+        pushLayout(newLayout);
+      }
+    },
+    [state, pushLayout],
+  );
+
+  const handleSplitPane = useCallback(
+    (tabId: string, sourcePath: string, targetPath: string, direction: "row" | "column") => {
+      if (state === undefined) return;
+
+      let layout = state.layout;
+
+      // If the tab is from a different pane, move it first
+      if (sourcePath !== targetPath) {
+        const movedLayout = moveTabBetweenPanes(layout, tabId, sourcePath, targetPath);
+        if (movedLayout === undefined) return;
+        layout = movedLayout;
+      }
+
+      // Now split at the target path
+      const newLayout = splitPane(layout, targetPath, tabId, direction);
       if (newLayout !== undefined) {
         pushLayout(newLayout);
       }
@@ -82,7 +116,9 @@ export function App(): React.ReactElement | null {
         tabs={state.tabs}
         windowId={windowId}
         onSetActiveTab={handleSetActiveTab}
+        onReorderTabs={handleReorderTabs}
         onMoveTabBetweenPanes={handleMoveTabBetweenPanes}
+        onSplitPane={handleSplitPane}
       />
     </div>
   );
@@ -95,7 +131,9 @@ interface LayoutRendererProps {
   tabs: Record<string, Tab>;
   windowId: number;
   onSetActiveTab: (panePath: string, tabId: string) => void;
+  onReorderTabs: (panePath: string, tabId: string, fromIndex: number, toIndex: number) => void;
   onMoveTabBetweenPanes: (tabId: string, fromPath: string, toPath: string, insertBeforeTabId?: string) => void;
+  onSplitPane: (tabId: string, sourcePath: string, direction: "row" | "column") => void;
   path?: string;
 }
 
@@ -104,7 +142,9 @@ function LayoutRenderer({
   tabs,
   windowId,
   onSetActiveTab,
+  onReorderTabs,
   onMoveTabBetweenPanes,
+  onSplitPane,
   path = "root",
 }: LayoutRendererProps): React.ReactElement {
   if (node.type === "pane") {
@@ -115,7 +155,9 @@ function LayoutRenderer({
         windowId={windowId}
         path={path}
         onSetActiveTab={(tabId) => onSetActiveTab(path, tabId)}
+        onReorderTabs={(tabId, from, to) => onReorderTabs(path, tabId, from, to)}
         onMoveTabBetweenPanes={onMoveTabBetweenPanes}
+        onSplitPane={(tabId, source, direction) => onSplitPane(tabId, source, path, direction)}
       />
     );
   }
@@ -143,7 +185,9 @@ function LayoutRenderer({
             tabs={tabs}
             windowId={windowId}
             onSetActiveTab={onSetActiveTab}
+            onReorderTabs={onReorderTabs}
             onMoveTabBetweenPanes={onMoveTabBetweenPanes}
+            onSplitPane={(tabId, source, dir) => onSplitPane(tabId, source, `${path}.${i}`, dir)}
             path={`${path}.${i}`}
           />
         </div>
@@ -161,8 +205,6 @@ function setActiveTabInTree(
 ): LayoutNode {
   if (node.type === "pane") {
     if (panePath !== "root" && !panePath.includes(".")) return node;
-    // Path doesn't identify this pane uniquely, but the click handler
-    // already knows the correct pane — just set the active tab
     return { ...node, activeTabId: tabId };
   }
 
@@ -175,8 +217,33 @@ function setActiveTabInTree(
 }
 
 /**
+ * Reorder tabs within a single pane. fromIndex and toIndex are positions
+ * within the tabIds array. The tab at fromIndex is moved to toIndex.
+ */
+function reorderTabsInPane(
+  root: LayoutNode,
+  panePath: string,
+  tabId: string,
+  fromIndex: number,
+  toIndex: number,
+): LayoutNode | undefined {
+  const cloned = structuredClone(root);
+  const pane = findPaneAtPath(cloned, panePath);
+  if (pane === undefined) return undefined;
+
+  // Verify the tab is at the expected index
+  if (pane.tabIds[fromIndex] !== tabId) return undefined;
+
+  // Remove from old position, insert at new position
+  pane.tabIds.splice(fromIndex, 1);
+  pane.tabIds.splice(toIndex, 0, tabId);
+  pane.activeTabId = tabId;
+
+  return cloned;
+}
+
+/**
  * Move a tab from one pane to another within the same window's layout tree.
- * Returns a new layout tree, or undefined if the move didn't change anything.
  */
 function moveTabBetweenPanes(
   root: LayoutNode,
@@ -185,10 +252,8 @@ function moveTabBetweenPanes(
   toPath: string,
   insertBeforeTabId?: string,
 ): LayoutNode | undefined {
-  // Deep clone the tree so we can mutate it
   const cloned = structuredClone(root);
 
-  // 1. Find the source pane and remove the tab
   const sourcePane = findPaneAtPath(cloned, fromPath);
   if (sourcePane === undefined) return undefined;
 
@@ -200,7 +265,6 @@ function moveTabBetweenPanes(
     sourcePane.activeTabId = sourcePane.tabIds[0] ?? "";
   }
 
-  // 2. Find the target pane and insert the tab
   const targetPane = findPaneAtPath(cloned, toPath);
   if (targetPane === undefined) return undefined;
 
@@ -216,8 +280,62 @@ function moveTabBetweenPanes(
   }
   targetPane.activeTabId = tabId;
 
-  // 3. Clean up empty panes
   return cleanupEmptyPanes(cloned);
+}
+
+/**
+ * Split a pane: remove the given tab from the pane, wrap the pane
+ * in a new SplitNode with a second child pane containing just that tab.
+ */
+function splitPane(
+  root: LayoutNode,
+  panePath: string,
+  tabId: string,
+  direction: "row" | "column",
+): LayoutNode | undefined {
+  const cloned = structuredClone(root);
+  const pane = findPaneAtPath(cloned, panePath);
+  if (pane === undefined) return undefined;
+
+  const tabIdx = pane.tabIds.indexOf(tabId);
+  if (tabIdx === -1) return undefined;
+
+  // Remove the tab from the original pane
+  pane.tabIds.splice(tabIdx, 1);
+  if (pane.activeTabId === tabId) {
+    pane.activeTabId = pane.tabIds[0] ?? "";
+  }
+
+  // Create a new child pane with just the split-off tab
+  const newChild: PaneNode = {
+    type: "pane",
+    tabIds: [tabId],
+    activeTabId: tabId,
+  };
+
+  // Replace the original pane in the tree with a split containing
+  // the original pane (minus the tab) and the new child pane
+  const split: SplitNode = {
+    type: "split",
+    direction,
+    sizes: [50, 50],
+    children: [
+      pane.tabIds.length > 0 ? { ...pane } : newChild,
+      pane.tabIds.length > 0 ? newChild : { ...pane },
+    ],
+  };
+
+  // If the original pane is now empty, both children are just the new tab
+  if (pane.tabIds.length === 0) {
+    // Don't split — the whole pane becomes just the tab
+    // (This shouldn't normally happen but is a safety fallback)
+    return cloned;
+  }
+
+  // Replace the pane at panePath with the split
+  replaceNodeAtPath(cloned, panePath, split);
+
+  return cloned;
 }
 
 /**
@@ -225,19 +343,14 @@ function moveTabBetweenPanes(
  */
 function findPaneAtPath(node: LayoutNode, path: string): PaneNode | undefined {
   const segments = path.split(".");
-  // Skip "root" prefix
   let current: LayoutNode = node;
 
-  for (let i = 0; i < segments.length; i++) {
-    const segment = segments[i];
+  for (const segment of segments) {
     if (segment === "root") continue;
     const idx = parseInt(segment, 10);
     if (isNaN(idx)) return undefined;
 
-    if (current.type === "pane") {
-      // Can't go deeper into a pane
-      return current;
-    }
+    if (current.type === "pane") return current;
 
     const child = current.children[idx];
     if (child === undefined) return undefined;
@@ -248,26 +361,52 @@ function findPaneAtPath(node: LayoutNode, path: string): PaneNode | undefined {
 }
 
 /**
- * Remove empty panes from split nodes, cleaning up the tree.
- * If a split node ends up with one child, replace it with that child.
+ * Replace the node at the given path with a new node.
+ * Mutates the tree in place (caller should structuredClone first).
  */
+function replaceNodeAtPath(root: LayoutNode, path: string, replacement: LayoutNode): boolean {
+  const segments = path.split(".");
+  // Navigate to the parent of the target
+  let current: LayoutNode = root;
+
+  for (let i = 0; i < segments.length; i++) {
+    const segment = segments[i]!;
+    if (segment === "root") continue;
+    const idx = parseInt(segment, 10);
+    if (isNaN(idx)) return false;
+
+    // If this is the last segment, replace the child
+    if (i === segments.length - 1) {
+      if (current.type === "split") {
+        current.children[idx] = replacement;
+        return true;
+      }
+      return false;
+    }
+
+    if (current.type === "pane") return false;
+    const child = current.children[idx];
+    if (child === undefined) return false;
+    current = child;
+  }
+
+  return false;
+}
+
 function cleanupEmptyPanes(node: LayoutNode): LayoutNode {
   if (node.type === "pane") return node;
 
   const cleanedChildren = node.children
     .map(cleanupEmptyPanes)
     .filter((child) => {
-      // Remove empty panes
       if (child.type === "pane" && child.tabIds.length === 0) return false;
       return true;
     });
 
-  // If only one child remains, collapse the split
   if (cleanedChildren.length === 1) {
     return cleanedChildren[0]!;
   }
 
-  // Redistribute sizes evenly
   const n = cleanedChildren.length;
   const each = 100 / n;
   return {
