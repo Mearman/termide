@@ -89,7 +89,7 @@ export const test = base.extend<ElectronTestFixture>({
     // 3. Launch Electron
     const executablePath = electronBinaryPath();
     const app = await electron.launch({
-      args: [mainPackage],
+      args: [mainPackage, "--headless=new"],
       cwd: projectRoot,
       env: {
         ...process.env,
