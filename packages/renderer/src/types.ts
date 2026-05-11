@@ -16,6 +16,10 @@ export interface ElectronAPI {
     tabBounds: { x: number; y: number; width: number; height: number };
   }) => void;
   tabDragEnd: (completed: boolean) => void;
+
+  // Test-only APIs
+  testCreateWindow: () => Promise<number>;
+  testSetDragTarget: (windowId: number | undefined) => number | undefined;
 }
 
 declare global {

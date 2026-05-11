@@ -57,22 +57,32 @@ export function Pane({
         sourceIndex: index,
       } satisfies TabDragData));
 
-      // Store drag info for potential cross-window handoff.
-      // We do NOT notify the main process yet — only when the drag leaves
-      // the window (detected via document dragleave) do we hand off.
+      // Notify main process that a cross-window drag MAY happen.
+      // Main process starts cursor polling; if the drag stays intra-window
+      // we'll tell it completed=false and it'll just clean up.
+      const tab = tabs[tabId];
+      if (tab !== undefined) {
+        window.electronAPI.tabDragBegin({
+          windowId,
+          tabId,
+          tabTitle: tab.title,
+          tabColour: tab.colour,
+          tabBounds: { x: 0, y: 0, width: 0, height: 0 },
+        });
+      }
     },
-    [path],
+    [path, windowId, tabs],
   );
 
   const handleDragEnd = useCallback(
     (e: React.DragEvent) => {
       setIsLocalDragOver(false);
-      // If the drop happened outside this window, the main process handles it.
-      // Otherwise intra-window HTML5 DnD already handled it.
-      if (e.dataTransfer.dropEffect === "none") {
-        // Drag ended outside — cross-window path
-        // TODO: notify main process for cross-window handling
-      }
+      // If the drop effect is "none", the drag left the window (or was cancelled).
+      // Tell the main process to handle it as a potential cross-window drop.
+      // If a successful intra-window drop happened, dropEffect is "move" —
+      // tell the main process to cancel its tracking.
+      const completed = e.dataTransfer.dropEffect === "none";
+      window.electronAPI.tabDragEnd(completed);
     },
     [],
   );

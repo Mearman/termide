@@ -42,4 +42,16 @@ contextBridge.exposeInMainWorld("electronAPI", {
   tabDragEnd: (completed) => {
     ipcRenderer.send("tab-drag-end", completed);
   },
+
+  // ─── Test-only APIs ────────────────────────────────────
+
+  /** Create a second test window. Returns the new window ID. */
+  testCreateWindow: () => {
+    return ipcRenderer.invoke("test-create-window");
+  },
+
+  /** Override drag coordinator's hovered window for testing. */
+  testSetDragTarget: (windowId) => {
+    return ipcRenderer.sendSync("test-set-drag-target", windowId);
+  },
 });

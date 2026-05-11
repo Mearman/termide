@@ -15,22 +15,43 @@
 import { screen, BrowserWindow } from "electron";
 import type { DragTabStartPayload } from "./types.ts";
 
-interface ActiveDrag {
-  sourceWindowId: number;
-  tabId: string;
-  targetWindowId: number | undefined;
-  pollInterval: ReturnType<typeof setInterval>;
-}
-
-let activeDrag: ActiveDrag | undefined;
-
-export type DragCompletionHandler = (result: DragResult) => void;
-
 export interface DragResult {
   tabId: string;
   sourceWindowId: number;
   targetWindowId: number | undefined;
   cursorPosition: { x: number; y: number };
+}
+
+export type DragCompletionHandler = (result: DragResult) => void;
+
+interface ActiveDrag {
+  sourceWindowId: number;
+  tabId: string;
+  /** Window currently under the cursor (updated by polling). */
+  hoveredWindowId: number | undefined;
+  pollInterval: ReturnType<typeof setInterval>;
+  onComplete: DragCompletionHandler;
+}
+
+let activeDrag: ActiveDrag | undefined;
+
+/**
+ * Expose the current drag target for testing.
+ * Only use this in tests to override the cursor-polling result.
+ * Stops the polling interval so it doesn't overwrite the test value.
+ */
+export function setDragTargetForTest(windowId: number | undefined): void {
+  if (activeDrag !== undefined) {
+    clearInterval(activeDrag.pollInterval);
+    activeDrag.hoveredWindowId = windowId;
+  }
+}
+
+/**
+ * Get the current drag target for test verification.
+ */
+export function getDragTargetForTest(): number | undefined {
+  return activeDrag?.hoveredWindowId;
 }
 
 /**
@@ -48,7 +69,7 @@ export function startDrag(
   activeDrag = {
     sourceWindowId: payload.windowId,
     tabId: payload.tabId,
-    targetWindowId: undefined,
+    hoveredWindowId: undefined,
     pollInterval,
     onComplete,
   };
@@ -72,7 +93,7 @@ export function endDrag(completed: boolean): void {
   const result: DragResult = {
     tabId: activeDrag.tabId,
     sourceWindowId: activeDrag.sourceWindowId,
-    targetWindowId: activeDrag.currentTargetWindowId,
+    targetWindowId: activeDrag.hoveredWindowId,
     cursorPosition: cursor,
   };
 
@@ -80,28 +101,28 @@ export function endDrag(completed: boolean): void {
   teardown();
 
   // Notify all windows that the drag ended
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed()) {
-      win.webContents.send("drag-leave");
-    }
-  }
+  broadcastDragLeave();
 
   handler(result);
 }
 
 function cancelDrag(): void {
   teardown();
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed()) {
-      win.webContents.send("drag-leave");
-    }
-  }
+  broadcastDragLeave();
 }
 
 function teardown(): void {
   if (activeDrag === undefined) return;
   clearInterval(activeDrag.pollInterval);
   activeDrag = undefined;
+}
+
+function broadcastDragLeave(): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) {
+      win.webContents.send("drag-leave");
+    }
+  }
 }
 
 /**
@@ -113,7 +134,7 @@ function tick(): void {
   const cursor = screen.getCursorScreenPoint();
   const windows = BrowserWindow.getAllWindows();
 
-  let newTargetId: number | undefined;
+  let newHoveredId: number | undefined;
   for (const win of windows) {
     if (win.isDestroyed()) continue;
     if (win.id === activeDrag.sourceWindowId) continue;
@@ -125,28 +146,28 @@ function tick(): void {
       cursor.y >= bounds.y &&
       cursor.y <= bounds.y + bounds.height
     ) {
-      newTargetId = win.id;
+      newHoveredId = win.id;
       break;
     }
   }
 
-  if (newTargetId !== activeDrag.currentTargetWindowId) {
+  if (newHoveredId !== activeDrag.hoveredWindowId) {
     // Leave old target
-    if (activeDrag.currentTargetWindowId !== undefined) {
-      const oldWin = BrowserWindow.fromId(activeDrag.currentTargetWindowId);
+    if (activeDrag.hoveredWindowId !== undefined) {
+      const oldWin = BrowserWindow.fromId(activeDrag.hoveredWindowId);
       if (oldWin !== null && !oldWin.isDestroyed()) {
         oldWin.webContents.send("drag-leave");
       }
     }
 
     // Enter new target
-    if (newTargetId !== undefined) {
-      const newWin = BrowserWindow.fromId(newTargetId);
+    if (newHoveredId !== undefined) {
+      const newWin = BrowserWindow.fromId(newHoveredId);
       if (newWin !== null && !newWin.isDestroyed()) {
         newWin.webContents.send("drag-enter", { tabId: activeDrag.tabId });
       }
     }
 
-    activeDrag.currentTargetWindowId = newTargetId;
+    activeDrag.hoveredWindowId = newHoveredId;
   }
 }

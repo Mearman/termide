@@ -13,20 +13,6 @@ function makeTab(title: string, colour: string): Tab {
   return { id: makeTabId(), title, colour };
 }
 
-// Initial demo tabs
-const tabs: AppState["allTabs"] = {};
-const demoTabs = [
-  makeTab("README.md", "#4a90d9"),
-  makeTab("index.ts", "#7bc67e"),
-  makeTab("styles.css", "#d4a05a"),
-  makeTab("package.json", "#c75d5d"),
-  makeTab("config.ts", "#9b6dbf"),
-  makeTab("utils.ts", "#5db8a0"),
-];
-for (const t of demoTabs) {
-  tabs[t.id] = t;
-}
-
 function makePane(...tabIds: string[]): PaneNode {
   return {
     type: "pane",
@@ -35,26 +21,41 @@ function makePane(...tabIds: string[]): PaneNode {
   };
 }
 
-const initialLayout: SplitNode = {
-  type: "split",
-  direction: "row",
-  sizes: [50, 50],
-  children: [
-    makePane(demoTabs[0].id, demoTabs[1].id, demoTabs[2].id),
-    makePane(demoTabs[3].id, demoTabs[4].id, demoTabs[5].id),
-  ],
-};
-
 export const appState: AppState = {
-  allTabs: tabs,
+  allTabs: {},
   windows: {},
 };
 
 export function registerWindow(windowId: number): void {
+  // Each window gets its own independent set of tabs with unique IDs.
+  const windowTabs: Record<string, Tab> = {};
+  const demoTabMeta = [
+    { title: "README.md", colour: "#4a90d9" },
+    { title: "index.ts", colour: "#7bc67e" },
+    { title: "styles.css", colour: "#d4a05a" },
+    { title: "package.json", colour: "#c75d5d" },
+    { title: "config.ts", colour: "#9b6dbf" },
+    { title: "utils.ts", colour: "#5db8a0" },
+  ];
+  const windowDemoTabs = demoTabMeta.map((m) => makeTab(m.title, m.colour));
+  for (const t of windowDemoTabs) {
+    windowTabs[t.id] = t;
+  }
+
+  const layout: SplitNode = {
+    type: "split",
+    direction: "row",
+    sizes: [50, 50],
+    children: [
+      makePane(windowDemoTabs[0].id, windowDemoTabs[1].id, windowDemoTabs[2].id),
+      makePane(windowDemoTabs[3].id, windowDemoTabs[4].id, windowDemoTabs[5].id),
+    ],
+  };
+
   appState.windows[windowId] = {
     windowId,
-    layout: initialLayout,
-    tabs: { ...tabs },
+    layout,
+    tabs: windowTabs,
   };
 }
 
