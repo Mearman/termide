@@ -2,12 +2,23 @@
   "$schema": "https://turbo.build/schema.json",
   "tasks": {
     "dev": {
-      "dependsOn": ["build"],
       "persistent": true,
       "cache": false
     },
-    "build": {
+    "_typecheck": {
+      "inputs": ["src/**/*.ts", "src/**/*.tsx", "tsconfig.json"]
+    },
+    "_build:preload": {
+      "inputs": ["src/preload.ts"],
+      "outputs": ["dist/preload.js"]
+    },
+    "_build": {
+      "dependsOn": ["_typecheck"],
+      "inputs": ["src/**/*.ts", "src/**/*.tsx", "tsconfig.json"],
       "outputs": ["dist/**"]
+    },
+    "_check": {
+      "dependsOn": ["_typecheck", "_build"]
     }
   }
 }

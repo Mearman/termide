@@ -2,7 +2,7 @@
  * Canonical application state. Lives in the main process.
  * Every mutation happens here; renderers receive snapshots.
  */
-import type { AppState, LayoutNode, PaneNode, SplitNode, Tab } from "./types";
+import type { AppState, LayoutNode, PaneNode, SplitNode, Tab } from "./types.ts";
 
 let nextTabId = 1;
 function makeTabId(): string {

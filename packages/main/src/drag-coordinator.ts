@@ -6,7 +6,7 @@
  * to the caller — does not create windows or push state itself.
  */
 import { screen, BrowserWindow } from "electron";
-import type { DragTabStartPayload } from "./types";
+import type { DragTabStartPayload } from "./types.ts";
 
 interface ActiveDrag {
   sourceWindowId: number;

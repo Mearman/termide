@@ -2,10 +2,10 @@
  * Main process entry point. Orchestrates window creation, state, and drag coordination.
  */
 import { app, BrowserWindow, ipcMain, screen } from "electron";
-import { createMainWindow, createWindowWithTab } from "./window-manager";
-import { appState, updateWindowLayout, moveTabCrossWindow } from "./state";
-import { startDrag, endDrag } from "./drag-coordinator";
-import type { DragTabStartPayload, TabMovedIntraPayload } from "./types";
+import { createMainWindow, createWindowWithTab } from "./window-manager.ts";
+import { appState, updateWindowLayout, moveTabCrossWindow } from "./state.ts";
+import { startDrag, endDrag } from "./drag-coordinator.ts";
+import type { DragTabStartPayload, TabMovedIntraPayload } from "./types.ts";
 
 // ─── IPC handlers ─────────────────────────────────────────
 

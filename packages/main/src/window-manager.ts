@@ -7,9 +7,10 @@ import {
 } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { registerWindow, createWindowForTab, appState } from "./state";
+import { registerWindow, createWindowForTab, appState } from "./state.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const projectRoot = path.resolve(__dirname, "..");
 
 const RENDERER_URL =
   process.env.RENDERER_URL ?? "http://localhost:5173";
@@ -17,7 +18,7 @@ const RENDERER_URL =
 const isDev = !RENDERER_URL.startsWith("file://");
 
 function preloadPath(): string {
-  return path.join(__dirname, "preload.js");
+  return path.join(projectRoot, "dist", "preload.mjs");
 }
 
 export function createMainWindow(): BrowserWindow {

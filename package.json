@@ -2,12 +2,13 @@
   "name": "electron-tab-drag-prototype",
   "private": true,
   "scripts": {
-    "dev": "turbo dev",
-    "build": "turbo build",
-    "lint": "turbo lint"
+    "_typecheck": "turbo run _typecheck",
+    "_build": "turbo run _build",
+    "_check": "turbo run _check",
+    "dev": "turbo run dev"
   },
   "devDependencies": {
-    "turbo": "^2.5"
+    "turbo": "^2.9"
   },
   "packageManager": "pnpm@10.12.1"
 }
