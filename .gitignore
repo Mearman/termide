@@ -3,3 +3,5 @@ dist/
 .turbo/
 *.map
 .DS_Store
+__screenshots__/
+test-results/

@@ -97,6 +97,7 @@ export function Pane({
   return (
     <div
       ref={paneRef}
+      data-testid="pane"
       className={`pane${isExternalDragOver ? " drag-over" : ""}`}
     >
       <div
@@ -116,6 +117,7 @@ export function Pane({
           return (
             <div
               key={tabId}
+              data-testid="tab"
               className={`tab${isActive ? " active" : ""}${isDragging ? " dragging" : ""}`}
               draggable
               onDragStart={(e) => handleTabDragStart(e, tabId)}

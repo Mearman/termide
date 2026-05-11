@@ -1,0 +1,12 @@
+{
+  "name": "@electron-tab-drag/e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "_test:ci": "playwright test --reporter=github"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.59"
+  }
+}
