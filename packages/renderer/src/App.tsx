@@ -164,6 +164,9 @@ function LayoutRenderer({
 
   return (
     <div
+      data-testid="split"
+      data-split-path={path}
+      data-direction={node.direction}
       style={{
         display: "flex",
         flexDirection: node.direction === "row" ? "row" : "column",
@@ -187,7 +190,7 @@ function LayoutRenderer({
             onSetActiveTab={onSetActiveTab}
             onReorderTabs={onReorderTabs}
             onMoveTabBetweenPanes={onMoveTabBetweenPanes}
-            onSplitPane={(tabId, source, dir) => onSplitPane(tabId, source, `${path}.${i}`, dir)}
+            onSplitPane={onSplitPane}
             path={`${path}.${i}`}
           />
         </div>
@@ -333,7 +336,9 @@ function splitPane(
   }
 
   // Replace the pane at panePath with the split
-  replaceNodeAtPath(cloned, panePath, split);
+  if (!replaceNodeAtPath(cloned, panePath, split)) {
+    return undefined;
+  }
 
   return cloned;
 }
@@ -341,6 +346,23 @@ function splitPane(
 /**
  * Navigate the layout tree by dot-separated path (e.g. "root.0.1").
  */
+function findNodeAtPath(root: LayoutNode, path: string): LayoutNode | undefined {
+  const segments = path.split(".");
+  let current: LayoutNode = root;
+
+  for (const segment of segments) {
+    if (segment === "root") continue;
+    const idx = parseInt(segment, 10);
+    if (isNaN(idx)) return undefined;
+    if (current.type === "pane") return undefined;
+    const child = current.children[idx];
+    if (child === undefined) return undefined;
+    current = child;
+  }
+
+  return current;
+}
+
 function findPaneAtPath(node: LayoutNode, path: string): PaneNode | undefined {
   const segments = path.split(".");
   let current: LayoutNode = node;

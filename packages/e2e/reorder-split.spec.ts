@@ -106,6 +106,16 @@ test.describe("Dynamic pane splitting", () => {
 
     // Should now have 3 panes (right pane split into two)
     await expect(page.locator("[data-testid='pane']")).toHaveCount(3);
+
+    // The new split should be horizontal (row)
+    const splits = page.locator("[data-testid='split']");
+    const directions: string[] = [];
+    const splitCount = await splits.count();
+    for (let i = 0; i < splitCount; i++) {
+      const dir = await splits.nth(i).getAttribute("data-direction");
+      if (dir !== null) directions.push(dir);
+    }
+    expect(directions).toContain("row");
   });
 
   test("dragging a tab from another pane to the bottom split zone splits it vertically", async ({ page }) => {
@@ -135,6 +145,14 @@ test.describe("Dynamic pane splitting", () => {
     await page.mouse.up();
 
     await expect(page.locator("[data-testid='pane']")).toHaveCount(3);
+    const splits = page.locator("[data-testid='split']");
+    const directions: string[] = [];
+    const splitCount = await splits.count();
+    for (let i = 0; i < splitCount; i++) {
+      const dir = await splits.nth(i).getAttribute("data-direction");
+      if (dir !== null) directions.push(dir);
+    }
+    expect(directions).toContain("column");
   });
 
   test("split zone only appears during drag", async ({ page }) => {
