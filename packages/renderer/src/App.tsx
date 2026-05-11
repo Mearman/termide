@@ -346,23 +346,6 @@ function splitPane(
 /**
  * Navigate the layout tree by dot-separated path (e.g. "root.0.1").
  */
-function findNodeAtPath(root: LayoutNode, path: string): LayoutNode | undefined {
-  const segments = path.split(".");
-  let current: LayoutNode = root;
-
-  for (const segment of segments) {
-    if (segment === "root") continue;
-    const idx = parseInt(segment, 10);
-    if (isNaN(idx)) return undefined;
-    if (current.type === "pane") return undefined;
-    const child = current.children[idx];
-    if (child === undefined) return undefined;
-    current = child;
-  }
-
-  return current;
-}
-
 function findPaneAtPath(node: LayoutNode, path: string): PaneNode | undefined {
   const segments = path.split(".");
   let current: LayoutNode = node;
