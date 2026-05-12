@@ -11,7 +11,7 @@ function makeTabId(): string {
 }
 
 function makeTab(title: string, colour: string): Tab {
-  return { id: makeTabId(), title, colour, pinned: false, preview: false };
+  return { id: makeTabId(), title, colour, pinned: false, preview: false, dirty: false };
 }
 
 function makePane(...tabIds: string[]): PaneNode {
@@ -239,6 +239,7 @@ export function openTabInWindow(windowId: number, title: string): void {
     colour,
     pinned: false,
     preview: true,
+    dirty: false,
   };
   state.tabs[newTab.id] = newTab;
 

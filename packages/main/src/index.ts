@@ -44,6 +44,17 @@ ipcMain.on("open-tab", (event, title: string): void => {
   openTabInWindow(win.id, title);
 });
 
+ipcMain.on("toggle-tab-dirty", (event, tabId: string): void => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (win === null) return;
+  const state = appState.windows[win.id];
+  if (state === undefined) return;
+  const tab = state.tabs[tabId];
+  if (tab === undefined) return;
+  tab.dirty = !tab.dirty;
+  pushStateToWindow(win.id);
+});
+
 ipcMain.on("tab-drag-begin", (_event, payload: DragTabStartPayload): void => {
   startDrag(payload, handleDragComplete);
 });

@@ -350,7 +350,7 @@ export function Pane({
               <div
                 data-testid="tab"
                 data-tab-id={tabId}
-                className={`tab${isActive ? " active" : ""}${isPinned ? " pinned" : ""}${tab.preview ? " preview" : ""}`}
+                className={`tab${isActive ? " active" : ""}${isPinned ? " pinned" : ""}${tab.preview ? " preview" : ""}${tab.dirty ? " dirty" : ""}`}
                 draggable
                 onDragStart={(e) => handleDragStart(e, tabId, index)}
                 onDragEnd={handleDragEnd}
@@ -385,8 +385,13 @@ export function Pane({
                     e.stopPropagation();
                     onCloseTab(tabId);
                   }}
+                  onContextMenu={(e) => {
+                    e.stopPropagation();
+                    // Right-click toggle dirty for demo
+                    window.electronAPI.toggleTabDirty(tabId);
+                  }}
                 >
-                  ×
+                  {tab.dirty ? "●" : "×"}
                 </span>
                 {showRightIndicator && <span className="tab-insert-indicator right" />}
               </div>

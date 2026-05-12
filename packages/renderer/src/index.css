@@ -214,6 +214,23 @@ html, body, #root {
   background: var(--bg-tab);
 }
 
+/* ─── Dirty indicator ─────────────────────────────────── */
+
+.tab.dirty .tab-close {
+  opacity: 0.6;
+  font-size: 8px;
+  color: var(--text-primary);
+}
+
+.tab.dirty:hover .tab-close {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.tab.dirty.active .tab-close {
+  opacity: 0.8;
+}
+
 /* ─── Tab insertion indicator ──────────────────────────── */
 
 .tab-insert-indicator {

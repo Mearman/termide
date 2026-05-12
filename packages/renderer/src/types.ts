@@ -11,6 +11,8 @@ export interface ElectronAPI {
   toggleTabPin: (tabId: string) => void;
   /** Open a tab by title (preview model: replaces current preview, pins if already open). */
   openTab: (title: string) => void;
+  /** Toggle the dirty/modified state of a tab. */
+  toggleTabDirty: (tabId: string) => void;
   tabDragBegin: (data: {
     windowId: number;
     tabId: string;
@@ -41,6 +43,8 @@ export interface Tab {
   pinned: boolean;
   /** Preview tabs are italic and replaced on next open. */
   preview: boolean;
+  /** Tab has unsaved changes (dirty indicator). */
+  dirty: boolean;
 }
 
 export interface PaneNode {

@@ -13,6 +13,8 @@ export interface Tab {
   pinned: boolean;
   /** Whether this is a preview tab (italic, temporary, replaced on next open). */
   preview: boolean;
+  /** Whether the tab content has unsaved changes (dirty indicator). */
+  dirty: boolean;
 }
 
 // ─── Layout tree (within a single window) ─────────────────

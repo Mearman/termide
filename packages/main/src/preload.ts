@@ -43,6 +43,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.send("open-tab", title);
   },
 
+  /** Toggle the dirty/modified state of a tab. */
+  toggleTabDirty: (tabId) => {
+    ipcRenderer.send("toggle-tab-dirty", tabId);
+  },
+
   /** Renderer tells main process a cross-window drag has begun. */
   tabDragBegin: (data) => {
     ipcRenderer.send("tab-drag-begin", data);
