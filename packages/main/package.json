@@ -10,6 +10,7 @@
     "dev": "tsdown && NODE_OPTIONS='--experimental-strip-types' node ../../node_modules/electron/cli.js ."
   },
   "devDependencies": {
+    "@types/node": "25.7.0",
     "tsdown": "^0.22",
     "typescript": "^6.0"
   },
