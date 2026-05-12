@@ -27,13 +27,17 @@ interface ElectronTestFixture {
 
 /**
  * Build the preload script (IIFE via tsdown).
+ * Run once per worker, not per test.
  */
+let preloadBuilt = false;
 function buildPreload(): void {
+  if (preloadBuilt) return;
   execSync("npx tsdown", {
     cwd: mainPackage,
     stdio: "pipe",
     env: { ...process.env },
   });
+  preloadBuilt = true;
 }
 
 /**
