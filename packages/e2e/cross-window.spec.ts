@@ -365,6 +365,9 @@ test.describe("Cross-window tab drag", () => {
       window.electronAPI.dragTargetEnter(targetWindowId);
       window.electronAPI.dragTargetPane("__stale-pane-id__");
     }, page1WindowId);
+    const paneBox = await page1.locator(".pane").first().boundingBox();
+    expect(paneBox).not.toBeNull();
+    await page1.mouse.move(paneBox!.x + paneBox!.width / 2, paneBox!.y + paneBox!.height / 2);
     await expect(page1.locator(".drop-overlay")).toHaveCount(1);
 
     await page2.evaluate(() => {
