@@ -1,7 +1,7 @@
 import { test, expect } from "./fixture";
 
-const TAB_BUTTON = '.mosaic-tab-button[draggable="true"]';
-const TABS_CONTAINER = ".mosaic-tabs-container";
+const TAB_BUTTON = '.tab-button';
+const TABS_CONTAINER = ".pane";
 
 test.describe("Tab reordering within a pane", () => {
   test("tab count stays the same after reordering", async ({ page }) => {
@@ -44,12 +44,12 @@ test.describe("Tab reordering within a pane", () => {
 });
 
 test.describe("Dynamic pane splitting", () => {
-  test("mosaic split handle exists between panes", async ({ page }) => {
+  test("resize handle exists between panes", async ({ page }) => {
     await page.waitForLoadState("domcontentloaded");
     await page.locator(TAB_BUTTON).first().waitFor({ timeout: 10_000 });
 
     // The mosaic-split divider should be visible
-    const split = page.locator(".mosaic-split");
+    const split = page.locator(".resize-handle");
     await expect(split).toHaveCount(1);
     await expect(split).toBeVisible();
   });
@@ -66,7 +66,7 @@ test.describe("Dynamic pane splitting", () => {
     const leftContainer = containers.first();
     const rightContainer = containers.last();
     const sourceTab = leftContainer.locator(TAB_BUTTON).first();
-    const targetTabBar = rightContainer.locator(".mosaic-tab-bar.draggable");
+    const targetTabBar = rightContainer.locator(".tab-bar");
 
     await sourceTab.dragTo(targetTabBar, { force: true });
 
@@ -80,7 +80,7 @@ test.describe("Dynamic pane splitting", () => {
     await page.locator(TAB_BUTTON).first().waitFor({ timeout: 10_000 });
 
     // Get the initial tile positions
-    const tiles = page.locator(".mosaic-tile");
+    const tiles = page.locator(".pane");
     await expect(tiles).toHaveCount(2);
 
     const firstTileBefore = await tiles.first().evaluate((el) => ({
@@ -88,7 +88,7 @@ test.describe("Dynamic pane splitting", () => {
     }));
 
     // Drag the split handle to resize
-    const split = page.locator(".mosaic-split").first();
+    const split = page.locator(".resize-handle").first();
     const splitBox = await split.boundingBox();
     expect(splitBox).not.toBeNull();
 

@@ -54,29 +54,29 @@ test.describe("Tab Drag Prototype", () => {
     expect(layout.direction).toBe("row");
   });
 
-  test("renders mosaic with tab groups in split layout", async ({ page }) => {
+  test("renders tab groups in split layout", async ({ page }) => {
     await page.waitForLoadState("domcontentloaded");
 
-    // Mosaic renders .mosaic-tile for each visible tile
-    const tiles = page.locator(".mosaic-tile");
+    // Mosaic renders .pane for each visible tile
+    const tiles = page.locator(".pane");
     await expect(tiles).toHaveCount(2, { timeout: 10_000 });
 
     // Mosaic renders tab buttons: draggable ones in the tab bar, non-draggable
     // ones in inactive tab overlays. Count only the interactive tab bar buttons.
-    const tabButtons = page.locator('.mosaic-tab-button[draggable="true"]');
+    const tabButtons = page.locator('.tab-button');
     await expect(tabButtons).toHaveCount(6, { timeout: 10_000 });
   });
 
-  test("split layout has a mosaic-split divider", async ({ page }) => {
+  test("split layout has a resize divider", async ({ page }) => {
     await page.waitForLoadState("domcontentloaded");
 
-    const splits = page.locator(".mosaic-split");
+    const splits = page.locator(".resize-handle");
     await expect(splits).toHaveCount(1, { timeout: 10_000 });
   });
 
   test("takes a screenshot of the initial state", async ({ page }) => {
     await page.waitForLoadState("domcontentloaded");
-    await page.locator(".mosaic-tile").first().waitFor({ timeout: 10_000 });
+    await page.locator(".pane").first().waitFor({ timeout: 10_000 });
 
     const fs = await import("node:fs/promises");
     await fs.mkdir(screenshotDir, { recursive: true });

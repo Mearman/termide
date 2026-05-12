@@ -1,381 +1,408 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import {
-  Mosaic,
-  type MosaicNode,
-} from "react-mosaic-component";
-import type { WindowStateFromMain, LayoutNode, Tab } from "./types.ts";
+import type { LayoutNode, PaneNode, SplitNode, Tab, WindowStateFromMain } from "./types.ts";
 
 const electron = window.electronAPI;
 
-// ─── Layout tree ↔ MosaicNode conversion ──────────────────
+// ─── Tree mutation helpers ────────────────────────────────
 
-function toMosaicNode(layout: LayoutNode): MosaicNode<string> {
+function collectTabIds(node: LayoutNode): string[] {
+  if (node.type === "pane") return [...node.tabIds];
+  return node.children.flatMap(collectTabIds);
+}
+
+function cloneLayout(node: LayoutNode): LayoutNode {
+  if (node.type === "pane") {
+    return { type: "pane", tabIds: [...node.tabIds], pinnedTabIds: [...node.pinnedTabIds], activeTabId: node.activeTabId };
+  }
+  return { type: "split", direction: node.direction, children: node.children.map(cloneLayout), sizes: [...node.sizes] };
+}
+
+function findPane(node: LayoutNode, tabId: string): PaneNode | undefined {
+  if (node.type === "pane") return node.tabIds.includes(tabId) ? node : undefined;
+  for (const c of node.children) { const f = findPane(c, tabId); if (f) return f; }
+  return undefined;
+}
+
+function removeTab(layout: LayoutNode, tabId: string): boolean {
   if (layout.type === "pane") {
-    const nonPinned = layout.tabIds.filter((id) => !layout.pinnedTabIds.includes(id));
-    const pinned = layout.pinnedTabIds.filter((id) => layout.tabIds.includes(id));
-    const ordered = [...pinned, ...nonPinned];
-
-    return {
-      type: "tabs",
-      tabs: ordered.length > 0 ? ordered : [""],
-      activeTabIndex: Math.max(0, ordered.indexOf(layout.activeTabId)),
-    };
+    const idx = layout.tabIds.indexOf(tabId);
+    if (idx === -1) return false;
+    layout.tabIds.splice(idx, 1);
+    layout.pinnedTabIds = layout.pinnedTabIds.filter(id => id !== tabId);
+    if (layout.activeTabId === tabId) layout.activeTabId = layout.tabIds[0] ?? "";
+    return true;
   }
-
-  return {
-    type: "split",
-    direction: layout.direction,
-    children: layout.children.map(toMosaicNode),
-    splitPercentages: layout.sizes.length > 0 ? layout.sizes : undefined,
-  };
+  for (let i = 0; i < layout.children.length; i++) {
+    if (removeTab(layout.children[i]!, tabId)) {
+      const child = layout.children[i]!;
+      if (child.type === "pane" && child.tabIds.length === 0) {
+        layout.children.splice(i, 1);
+        layout.sizes.splice(i, 1);
+        const n = layout.sizes.length;
+        if (n > 0) layout.sizes = Array(n).fill(100 / n);
+      }
+      return true;
+    }
+  }
+  return false;
 }
 
-function fromMosaicNode(
-  mosaic: MosaicNode<string>,
-  tabs: Record<string, Tab>,
-): LayoutNode {
-  if (typeof mosaic === "string") {
-    const tab = tabs[mosaic];
-    return {
-      type: "pane",
-      tabIds: mosaic !== "" ? [mosaic] : [],
-      pinnedTabIds: tab?.pinned === true ? [mosaic] : [],
-      activeTabId: mosaic,
-    };
-  }
-
-  if (mosaic.type === "tabs") {
-    const tabIds = [...mosaic.tabs];
-    const pinnedTabIds = tabIds.filter((id) => tabs[id]?.pinned === true);
-    const activeIdx = mosaic.activeTabIndex;
-    return {
-      type: "pane",
-      tabIds,
-      pinnedTabIds,
-      activeTabId: tabIds[activeIdx] ?? tabIds[0] ?? "",
-    };
-  }
-
-  return {
-    type: "split",
-    direction: mosaic.direction,
-    children: mosaic.children.map((child) => fromMosaicNode(child, tabs)),
-    sizes: mosaic.splitPercentages ?? Array(mosaic.children.length).fill(100 / mosaic.children.length),
-  };
-}
-
-function collectTabIds(mosaic: MosaicNode<string>): string[] {
-  if (typeof mosaic === "string") return mosaic !== "" ? [mosaic] : [];
-  if (mosaic.type === "tabs") return [...mosaic.tabs];
-  return mosaic.children.flatMap(collectTabIds);
+function paneIdentity(pane: PaneNode): string {
+  // Use first tab ID as a stable identity for a pane within a render pass
+  return pane.tabIds[0] ?? "__empty__";
 }
 
 // ─── App component ────────────────────────────────────────
 
 export function App(): React.ReactElement | null {
-  const [windowId, setWindowId] = useState<number>(-1);
+  const [windowId, setWindowId] = useState(-1);
   const [state, setState] = useState<WindowStateFromMain | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
-  const [contextMenu, setContextMenu] = useState<
-    { tabId: string; x: number; y: number } | undefined
-  >(undefined);
-  const [dropOverlayVisible, setDropOverlayVisible] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ tabId: string; x: number; y: number } | undefined>(undefined);
+  const [dropOverlay, setDropOverlay] = useState(false);
 
   useEffect(() => {
-    if (electron === undefined) {
-      setError("electronAPI not available — preload script did not load");
-      return;
-    }
-    const id = electron.getWindowId();
-    setWindowId(id);
-    const initial = electron.getInitialState();
-    if (initial !== undefined) {
-      setState(initial);
-    }
+    if (electron === undefined) { setError("electronAPI not available"); return; }
+    setWindowId(electron.getWindowId());
+    const init = electron.getInitialState();
+    if (init !== undefined) setState(init);
+  }, []);
+
+  useEffect(() => { return electron.onStateUpdated(s => setState(s)); }, []);
+
+  useEffect(() => {
+    const e = electron.onDragEnter(() => setDropOverlay(true));
+    const l = electron.onDragLeave(() => setDropOverlay(false));
+    return () => { e(); l(); };
   }, []);
 
   useEffect(() => {
-    const unsub = electron.onStateUpdated((newState) => {
-      setState(newState);
-    });
-    return unsub;
-  }, []);
+    if (contextMenu === undefined) return;
+    const h = () => setContextMenu(undefined);
+    window.addEventListener("click", h);
+    return () => window.removeEventListener("click", h);
+  }, [contextMenu]);
 
-  // ─── Cross-window drop indicator ──────────────────────
-
-  useEffect(() => {
-    const unsubEnter = electron.onDragEnter(() => setDropOverlayVisible(true));
-    const unsubLeave = electron.onDragLeave(() => setDropOverlayVisible(false));
-    return () => {
-      unsubEnter();
-      unsubLeave();
-    };
-  }, []);
-
-  const mosaicRootRef = useRef<HTMLDivElement>(null);
-
-  // ─── Mosaic onChange: sync layout back to main process ──
-
-  const handleMosaicChange = useCallback(
-    (newMosaic: MosaicNode<string> | null) => {
-      if (state === undefined || newMosaic === null) return;
-
-      const newLayout = fromMosaicNode(newMosaic, state.tabs);
-
-      const referencedIds = new Set(collectTabIds(newMosaic));
-      const newTabs: Record<string, Tab> = {};
-      for (const [id, tab] of Object.entries(state.tabs)) {
-        if (referencedIds.has(id)) {
-          newTabs[id] = tab;
-        }
-      }
-
-      setState({ ...state, layout: newLayout, tabs: newTabs });
-      electron.tabMovedIntra({ windowId, layout: newLayout });
-    },
-    [state, windowId],
-  );
-
-  // ─── Cross-window drag hooks ────────────────────────────
-
-  useEffect(() => {
-    const el = mosaicRootRef.current;
-    if (el === null) return;
-
-    const handleDragStart = (e: DragEvent) => {
-      const target = (e.target as HTMLElement).closest('.mosaic-tab-button[draggable="true"]');
-      if (target === null) return;
-      const tabId = target.getAttribute("title");
-      if (tabId === null) return;
-
-      const tab = state?.tabs[tabId];
-      if (tab === undefined) return;
-
-      electron.tabDragBegin({
-        windowId,
-        tabId,
-        tabTitle: tab.title,
-        tabColour: tab.colour,
-        tabBounds: { x: 0, y: 0, width: 0, height: 0 },
-      });
-    };
-
-    const handleDragEnd = (e: DragEvent) => {
-      const completed = e.dataTransfer?.dropEffect === "none";
-      electron.tabDragEnd(completed);
-    };
-
-    el.addEventListener("dragstart", handleDragStart);
-    el.addEventListener("dragend", handleDragEnd);
-    return () => {
-      el.removeEventListener("dragstart", handleDragStart);
-      el.removeEventListener("dragend", handleDragEnd);
-    };
+  const syncLayout = useCallback((layout: LayoutNode, tabs?: Record<string, Tab>) => {
+    if (state === undefined) return;
+    const t = tabs ?? state.tabs;
+    setState({ ...state, layout, tabs: t });
+    electron.tabMovedIntra({ windowId, layout });
   }, [state, windowId]);
 
-  // ─── Middle-click to close tabs ─────────────────────────
+  const handleTabClick = useCallback((paneId: string, tabId: string) => {
+    if (state === undefined) return;
+    const layout = cloneLayout(state.layout);
+    const p = findPane(layout, tabId);
+    if (p === undefined || p.activeTabId === tabId) return;
+    p.activeTabId = tabId;
+    syncLayout(layout);
+  }, [state, syncLayout]);
 
-  useEffect(() => {
-    const el = mosaicRootRef.current;
-    if (el === null) return;
+  const handleCloseTab = useCallback((tabId: string) => {
+    if (state === undefined) return;
+    const layout = cloneLayout(state.layout);
+    removeTab(layout, tabId);
+    const tabs = { ...state.tabs };
+    delete tabs[tabId];
+    syncLayout(layout, tabs);
+  }, [state, syncLayout]);
 
-    const handleAuxClick = (e: MouseEvent) => {
-      if (e.button !== 1) return; // middle-click only
-      const target = (e.target as HTMLElement).closest('.mosaic-tab-button[draggable="true"]');
-      if (target === null) return;
-      const tabId = target.getAttribute("title");
-      if (tabId === null) return;
-      e.preventDefault();
-      handleCloseTab(tabId);
-    };
+  const handleResize = useCallback((splitPath: number[], sizes: number[]) => {
+    if (state === undefined) return;
+    const layout = cloneLayout(state.layout);
+    let node: LayoutNode = layout;
+    for (const idx of splitPath) {
+      if (node.type === "pane") return;
+      node = node.children[idx]!;
+    }
+    if (node.type === "split") {
+      node.sizes = sizes;
+      syncLayout(layout);
+    }
+  }, [state, syncLayout]);
 
-    el.addEventListener("auxclick", handleAuxClick);
-    return () => el.removeEventListener("auxclick", handleAuxClick);
-  }, [state]);
+  const handleTabDragStart = useCallback((e: React.DragEvent, tabId: string) => {
+    e.dataTransfer.setData("application/tab-id", tabId);
+    e.dataTransfer.effectAllowed = "move";
+    const tab = state?.tabs[tabId];
+    if (tab !== undefined) {
+      electron.tabDragBegin({ windowId, tabId, tabTitle: tab.title, tabColour: tab.colour, tabBounds: { x: 0, y: 0, width: 0, height: 0 } });
+    }
+  }, [state, windowId]);
 
-  // ─── Right-click context menu ───────────────────────────
-
-  useEffect(() => {
-    const el = mosaicRootRef.current;
-    if (el === null) return;
-
-    const handleContextMenu = (e: MouseEvent) => {
-      const target = (e.target as HTMLElement).closest('.mosaic-tab-button[draggable="true"]');
-      if (target === null) return;
-      const tabId = target.getAttribute("title");
-      if (tabId === null) return;
-      e.preventDefault();
-      setContextMenu({ tabId, x: e.clientX, y: e.clientY });
-    };
-
-    // Click outside to close context menu
-    const handleClick = () => setContextMenu(undefined);
-
-    el.addEventListener("contextmenu", handleContextMenu);
-    el.addEventListener("click", handleClick);
-    return () => {
-      el.removeEventListener("contextmenu", handleContextMenu);
-      el.removeEventListener("click", handleClick);
-    };
+  const handleTabDragEnd = useCallback((e: React.DragEvent) => {
+    electron.tabDragEnd(e.dataTransfer.dropEffect === "none");
   }, []);
 
-  // ─── Close tab handler ─────────────────────────────────
+  const handlePaneDrop = useCallback((targetPaneId: string, tabId: string, insertIndex: number) => {
+    if (state === undefined) return;
+    const sourcePane = findPane(state.layout, tabId);
+    if (sourcePane === undefined) return;
+    const sourcePaneId = paneIdentity(sourcePane);
+    const layout = cloneLayout(state.layout);
 
-  const handleCloseTab = useCallback(
-    (tabId: string) => {
-      if (state === undefined) return;
-      const mosaic = toMosaicNode(state.layout);
-      const newMosaic = removeTabFromMosaic(mosaic, tabId);
-      if (newMosaic === undefined) return;
-      const newLayout = fromMosaicNode(newMosaic, state.tabs);
-      const newTabs = { ...state.tabs };
-      delete newTabs[tabId];
-      setState({ ...state, layout: newLayout, tabs: newTabs });
-      electron.tabMovedIntra({ windowId, layout: newLayout });
-    },
-    [state, windowId],
-  );
+    if (sourcePaneId === targetPaneId) {
+      // Reorder within same pane
+      const p = findPane(layout, tabId);
+      if (p === undefined) return;
+      const fromIdx = p.tabIds.indexOf(tabId);
+      if (fromIdx === -1) return;
+      p.tabIds.splice(fromIdx, 1);
+      const adjustedIdx = fromIdx < insertIndex ? insertIndex - 1 : insertIndex;
+      p.tabIds.splice(adjustedIdx, 0, tabId);
+    } else {
+      // Move between panes
+      removeTab(layout, tabId);
+      // Find target pane by identity
+      const target = findPaneByIdentity(layout, targetPaneId);
+      if (target !== undefined) {
+        target.tabIds.splice(insertIndex, 0, tabId);
+        target.activeTabId = tabId;
+      }
+    }
+    syncLayout(layout);
+  }, [state, syncLayout]);
 
-  if (error !== undefined) {
-    return <div style={{ padding: 20, color: "#c75d5d" }}>Error: {error}</div>;
-  }
+  const handleOpenTab = useCallback((title: string) => { electron.openTab(title); }, []);
+  const handleTogglePin = useCallback((tabId: string) => { electron.toggleTabPin(tabId); }, []);
 
-  if (state === undefined) {
-    return <div style={{ padding: 20, color: "#a6adc8" }}>Loading…</div>;
-  }
-
-  const mosaicNode = toMosaicNode(state.layout);
+  if (error !== undefined) return <div className="error">{error}</div>;
+  if (state === undefined) return <div className="loading">Loading…</div>;
 
   return (
-    <div className="mosaic-root-container" ref={mosaicRootRef}>
-      <Mosaic<string>
-        value={mosaicNode}
-        onChange={handleMosaicChange}
-        renderTile={(tabId: string) => (
-          <TileContent tabId={tabId} tabs={state.tabs} />
-        )}
-        renderTabTitle={(props: { tabKey: string }) => {
-          const tab = state.tabs[props.tabKey];
-          return tab !== undefined ? (
-            <span className="mosaic-custom-tab-title">
-              <span className="tab-colour" style={{ background: tab.colour }} />
-              <span className="mosaic-tab-label">{tab.title}</span>
-              {tab.pinned && <span className="mosaic-tab-badge">📌</span>}
-              {tab.preview && <span className="mosaic-tab-badge preview-badge">preview</span>}
-              {tab.dirty && <span className="mosaic-tab-badge dirty-badge">●</span>}
-            </span>
-          ) : (
-            <span>{props.tabKey}</span>
-          );
-        }}
-        canClose={() => "canClose"}
-        className="mosaic-blueprint-theme"
-        resize={{ minimumPaneSizePercentage: 5 }}
+    <div className="layout-root">
+      <SplitOrPane
+        node={state.layout}
+        tabs={state.tabs}
+        splitPath={[]}
+        onTabClick={handleTabClick}
+        onCloseTab={handleCloseTab}
+        onResize={handleResize}
+        onTabDragStart={handleTabDragStart}
+        onTabDragEnd={handleTabDragEnd}
+        onPaneDrop={handlePaneDrop}
+        onOpenTab={handleOpenTab}
+        onContextMenu={(tabId, x, y) => setContextMenu({ tabId, x, y })}
       />
-
-      {/* Context menu overlay */}
+      {dropOverlay && <div className="drop-overlay" />}
       {contextMenu !== undefined && (
-        <div
-          className="tab-context-menu"
-          style={{ left: contextMenu.x, top: contextMenu.y }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <button
-            className="tab-context-item"
-            onClick={() => {
-              electron.toggleTabPin(contextMenu.tabId);
-              setContextMenu(undefined);
-            }}
-          >
+        <div className="context-menu" style={{ left: contextMenu.x, top: contextMenu.y }} onClick={e => e.stopPropagation()}>
+          <button className="context-item" onClick={() => { electron.toggleTabPin(contextMenu.tabId); setContextMenu(undefined); }}>
             {state.tabs[contextMenu.tabId]?.pinned ? "Unpin" : "Pin"}
           </button>
-          <button
-            className="tab-context-item"
-            onClick={() => {
-              handleCloseTab(contextMenu.tabId);
-              setContextMenu(undefined);
-            }}
-          >
+          <button className="context-item" onClick={() => { handleCloseTab(contextMenu.tabId); setContextMenu(undefined); }}>
             Close
           </button>
         </div>
-      )}
-
-      {/* Cross-window drop overlay */}
-      {dropOverlayVisible && (
-        <div className="drop-overlay" />
       )}
     </div>
   );
 }
 
-// ─── Tile content renderer ────────────────────────────────
+// ─── Shared callback interface ────────────────────────────
 
-function TileContent({
-  tabId,
-  tabs,
-}: {
-  tabId: string;
+interface Callbacks {
+  onTabClick: (paneId: string, tabId: string) => void;
+  onCloseTab: (tabId: string) => void;
+  onResize: (splitPath: number[], sizes: number[]) => void;
+  onTabDragStart: (e: React.DragEvent, tabId: string) => void;
+  onTabDragEnd: (e: React.DragEvent) => void;
+  onPaneDrop: (targetPaneId: string, tabId: string, insertIndex: number) => void;
+  onOpenTab: (title: string) => void;
+  onContextMenu: (tabId: string, x: number, y: number) => void;
+}
+
+// ─── Recursive layout ─────────────────────────────────────
+
+function SplitOrPane(props: {
+  node: LayoutNode;
   tabs: Record<string, Tab>;
-}): React.ReactElement {
-  const tab = tabs[tabId];
-  const title = tab?.title ?? tabId;
-  const colour = tab?.colour ?? "#888";
+  splitPath: number[];
+} & Callbacks): React.ReactElement {
+  if (props.node.type === "pane") return <Pane {...props} pane={props.node} />;
+  return <Split {...props} split={props.node} />;
+}
+
+// ─── Split ────────────────────────────────────────────────
+
+function Split(props: {
+  split: SplitNode;
+  tabs: Record<string, Tab>;
+  splitPath: number[];
+} & Callbacks): React.ReactElement {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [dragIdx, setDragIdx] = useState(-1);
+  const sizesRef = useRef([...props.split.sizes]);
+
+  const handleMouseDown = useCallback((index: number, e: React.MouseEvent) => {
+    e.preventDefault();
+    setDragIdx(index);
+    sizesRef.current = [...props.split.sizes];
+    const startPos = props.split.direction === "row" ? e.clientX : e.clientY;
+
+    const onMove = (ev: MouseEvent) => {
+      const container = containerRef.current;
+      if (container === null) return;
+      const rect = container.getBoundingClientRect();
+      const totalPx = props.split.direction === "row" ? rect.width : rect.height;
+      const deltaPx = (props.split.direction === "row" ? ev.clientX : ev.clientY) - startPos;
+      const deltaPct = (deltaPx / totalPx) * 100;
+
+      const sizes = [...sizesRef.current];
+      const left = sizes[index]! + deltaPct;
+      const right = sizes[index + 1]! - deltaPct;
+      if (left < 5 || right < 5) return;
+      sizes[index] = left;
+      sizes[index + 1] = right;
+      // Re-normalise
+      const sum = sizes.reduce((a, b) => a + b, 0);
+      sizesRef.current = sizes.map(s => (s / sum) * 100);
+      setDragIdx(index); // trigger re-render
+    };
+
+    const onUp = () => {
+      props.onResize(props.splitPath, sizesRef.current);
+      setDragIdx(-1);
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }, [props]);
+
+  const dir = props.split.direction === "row" ? "row" : "column";
+  const currentSizes = dragIdx >= 0 ? sizesRef.current : props.split.sizes;
 
   return (
-    <div className="mosaic-tile-content">
-      <div className="tile-body">
-        <div className="content-header">
-          <span className="content-colour-dot" style={{ backgroundColor: colour }} />
-          <span className="content-title">{title}</span>
-          {tab?.pinned && <span className="content-badge pinned">pinned</span>}
-          {tab?.preview && <span className="content-badge preview">preview</span>}
-          {tab?.dirty && <span className="content-badge dirty">modified</span>}
-          <button
-            className="content-action-button"
-            onClick={() => window.electronAPI.toggleTabDirty(tabId)}
-          >
-            {tab?.dirty ? "Save" : "Edit"}
-          </button>
-        </div>
+    <div ref={containerRef} className={`split split-${dir}`}>
+      {props.split.children.map((child, i) => (
+        <React.Fragment key={i}>
+          <div className="split-child" style={{ flexBasis: `${currentSizes[i]}%` }}>
+            <SplitOrPane
+              node={child}
+              tabs={props.tabs}
+              splitPath={[...props.splitPath, i]}
+              onTabClick={props.onTabClick}
+              onCloseTab={props.onCloseTab}
+              onResize={props.onResize}
+              onTabDragStart={props.onTabDragStart}
+              onTabDragEnd={props.onTabDragEnd}
+              onPaneDrop={props.onPaneDrop}
+              onOpenTab={props.onOpenTab}
+              onContextMenu={props.onContextMenu}
+            />
+          </div>
+          {i < props.split.children.length - 1 && (
+            <div className={`resize-handle resize-${dir}`} onMouseDown={e => handleMouseDown(i, e)} />
+          )}
+        </React.Fragment>
+      ))}
+    </div>
+  );
+}
+
+// ─── Pane (tab bar + content) ─────────────────────────────
+
+function findPaneByIdentity(node: LayoutNode, paneId: string): PaneNode | undefined {
+  if (node.type === "pane") return paneIdentity(node) === paneId ? node : undefined;
+  for (const c of node.children) { const f = findPaneByIdentity(c, paneId); if (f) return f; }
+  return undefined;
+}
+
+const NEW_TITLES = ["new-file.ts", "untitled.txt", "scratch.md", "notes.json", "config.yaml", "test.spec.ts"];
+
+function Pane(props: {
+  pane: PaneNode;
+  tabs: Record<string, Tab>;
+} & Callbacks): React.ReactElement {
+  const { pane, tabs } = props;
+  const pid = paneIdentity(pane);
+  const insertRef = useRef(-1);
+
+  const computeInsertIndex = (barEl: HTMLElement, clientX: number): number => {
+    const buttons = barEl.querySelectorAll(".tab-button");
+    const barRect = barEl.getBoundingClientRect();
+    const x = clientX - barRect.left;
+    for (let i = 0; i < buttons.length; i++) {
+      const btnRect = buttons[i]!.getBoundingClientRect();
+      if (x < btnRect.left - barRect.left + btnRect.width / 2) return i;
+    }
+    return buttons.length;
+  };
+
+  return (
+    <div className="pane">
+      <div
+        className="tab-bar"
+        onDragOver={e => {
+          if (!e.dataTransfer.types.includes("application/tab-id")) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "move";
+          insertRef.current = computeInsertIndex(e.currentTarget, e.clientX);
+          e.currentTarget.dataset.insert = String(insertRef.current);
+        }}
+        onDragLeave={e => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+            delete e.currentTarget.dataset.insert;
+          }
+        }}
+        onDrop={e => {
+          delete e.currentTarget.dataset.insert;
+          const tabId = e.dataTransfer.getData("application/tab-id");
+          if (tabId === "") return;
+          e.preventDefault();
+          props.onPaneDrop(pid, tabId, insertRef.current >= 0 ? insertRef.current : pane.tabIds.length);
+          insertRef.current = -1;
+        }}
+      >
+        {pane.tabIds.map(tabId => {
+          const tab = tabs[tabId];
+          const active = tabId === pane.activeTabId;
+          return (
+            <button
+              key={tabId}
+              className={`tab-button${active ? " active" : ""}${tab?.pinned ? " pinned" : ""}`}
+              draggable
+              onClick={() => props.onTabClick(pid, tabId)}
+              onDragStart={e => props.onTabDragStart(e, tabId)}
+              onDragEnd={e => props.onTabDragEnd(e)}
+              onContextMenu={e => { e.preventDefault(); props.onContextMenu(tabId, e.clientX, e.clientY); }}
+              onAuxClick={e => { if (e.button === 1) { e.preventDefault(); props.onCloseTab(tabId); } }}
+            >
+              <span className="tab-dot" style={{ background: tab?.colour ?? "#888" }} />
+              <span className="tab-title">{tab?.title ?? tabId}</span>
+              {tab?.pinned && <span className="tab-badge">📌</span>}
+              {tab?.preview && <span className="tab-badge preview">preview</span>}
+              {tab?.dirty && <span className="tab-badge dirty">●</span>}
+              <span className="tab-close" onClick={e => { e.stopPropagation(); props.onCloseTab(tabId); }}>
+                {tab?.dirty ? "●" : "×"}
+              </span>
+            </button>
+          );
+        })}
+        <button className="tab-add" onClick={() => props.onOpenTab(NEW_TITLES[Math.floor(Math.random() * NEW_TITLES.length)])}>+</button>
+      </div>
+      <div className="pane-content">
+        <ContentArea tab={tabs[pane.activeTabId]} tabId={pane.activeTabId} />
       </div>
     </div>
   );
 }
 
-// ─── Mosaic tree mutation helpers ─────────────────────────
-
-function removeTabFromMosaic(
-  node: MosaicNode<string>,
-  tabId: string,
-): MosaicNode<string> | undefined {
-  if (typeof node === "string") {
-    return node === tabId ? undefined : node;
-  }
-
-  if (node.type === "tabs") {
-    const idx = node.tabs.indexOf(tabId);
-    if (idx === -1) return node;
-
-    const newTabs = node.tabs.filter((t) => t !== tabId);
-    if (newTabs.length === 0) return undefined;
-    if (newTabs.length === 1) return newTabs[0]!;
-
-    const newActive = Math.min(node.activeTabIndex, newTabs.length - 1);
-    return { ...node, tabs: newTabs, activeTabIndex: newActive };
-  }
-
-  const newChildren = node.children
-    .map((child) => removeTabFromMosaic(child, tabId))
-    .filter((c): c is MosaicNode<string> => c !== undefined);
-
-  if (newChildren.length === 0) return undefined;
-  if (newChildren.length === 1) return newChildren[0]!;
-
-  const n = newChildren.length;
-  return {
-    ...node,
-    children: newChildren,
-    splitPercentages: node.splitPercentages ?? Array(n).fill(100 / n),
-  };
+function ContentArea({ tab, tabId }: { tab: Tab | undefined; tabId: string }): React.ReactElement {
+  if (tab === undefined) return <div className="content-empty">No tab open</div>;
+  return (
+    <div className="content-header">
+      <span className="content-dot" style={{ backgroundColor: tab.colour }} />
+      <span className="content-title">{tab.title}</span>
+      {tab.pinned && <span className="content-badge pinned">pinned</span>}
+      {tab.preview && <span className="content-badge preview">preview</span>}
+      {tab.dirty && <span className="content-badge dirty">modified</span>}
+      <button className="content-action" onClick={() => electron.toggleTabDirty(tabId)}>
+        {tab.dirty ? "Save" : "Edit"}
+      </button>
+    </div>
+  );
 }

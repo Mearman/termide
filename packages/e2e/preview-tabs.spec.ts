@@ -9,8 +9,8 @@
  */
 import { test, expect } from "./fixture";
 
-const TAB_BUTTON = '.mosaic-tab-button[draggable="true"]';
-const TABS_CONTAINER = ".mosaic-tabs-container";
+const TAB_BUTTON = '.tab-button';
+const TABS_CONTAINER = ".pane";
 
 test.describe("Tab opening and preview model", () => {
   test("clicking + button adds a new tab", async ({ page }) => {

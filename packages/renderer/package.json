@@ -10,8 +10,7 @@
   },
   "dependencies": {
     "react": "^19.1",
-    "react-dom": "^19.1",
-    "react-mosaic-component": "^7.0.0-beta0"
+    "react-dom": "^19.1"
   },
   "devDependencies": {
     "@types/react": "^19.1",

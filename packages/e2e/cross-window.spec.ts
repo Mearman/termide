@@ -14,8 +14,8 @@
 import { test, expect } from "./fixture";
 import type { Page, ElectronApplication } from "@playwright/test";
 
-const TAB_BUTTON = '.mosaic-tab-button[draggable="true"]';
-const TABS_CONTAINER = ".mosaic-tabs-container";
+const TAB_BUTTON = '.tab-button';
+const TABS_CONTAINER = ".pane";
 
 test.describe("Cross-window tab drag", () => {
   /**
@@ -189,7 +189,7 @@ test.describe("Cross-window tab drag", () => {
 
     // The moved tab's title should appear in window 2
     const window2Titles = await page2.locator(TAB_BUTTON).evaluateAll(
-      (els) => els.map((e) => e.querySelector(".mosaic-tab-label")?.textContent),
+      (els) => els.map((e) => e.querySelector(".tab-title")?.textContent),
     );
     expect(window2Titles.some((t) => t?.includes(tabTitle))).toBe(true);
   });

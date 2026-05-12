@@ -11,7 +11,7 @@
 import { test, expect } from "./fixture";
 import type { Page, ElectronApplication } from "@playwright/test";
 
-const TAB_BUTTON = '.mosaic-tab-button[draggable="true"]';
+const TAB_BUTTON = '.tab-button';
 
 // Skip entire suite in headless mode — cursor polling doesn't work
 test.skip(({ browserName }) => {

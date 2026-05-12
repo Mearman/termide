@@ -1,9 +1,9 @@
 import { test, expect } from "./fixture";
 
 /** Selector for the draggable tab buttons in mosaic tab bars. */
-const TAB_BUTTON = '.mosaic-tab-button[draggable="true"]';
+const TAB_BUTTON = '.tab-button';
 /** Selector for mosaic tab group containers. */
-const TABS_CONTAINER = ".mosaic-tabs-container";
+const TABS_CONTAINER = ".pane";
 
 test.describe("Intra-window tab activation", () => {
   test("clicking a tab activates it", async ({ page }) => {
@@ -23,7 +23,7 @@ test.describe("Intra-window tab activation", () => {
     await expect(contentTitle).toContainText("index.ts");
   });
 
-  test("active tab has .-active class", async ({ page }) => {
+  test("active tab has .active class", async ({ page }) => {
     await page.waitForLoadState("domcontentloaded");
     await page.locator(TAB_BUTTON).first().waitFor({ timeout: 10_000 });
 
@@ -32,14 +32,14 @@ test.describe("Intra-window tab activation", () => {
     const leftTabs = leftContainer.locator(TAB_BUTTON);
 
     // First tab should be active initially
-    await expect(leftTabs.first()).toHaveClass(/-active/);
+    await expect(leftTabs.first()).toHaveClass(/active/);
 
     // Click the third tab
     await leftTabs.nth(2).click();
 
     // Third tab should now be active, first should not
-    await expect(leftTabs.nth(2)).toHaveClass(/-active/);
-    await expect(leftTabs.first()).not.toHaveClass(/-active/);
+    await expect(leftTabs.nth(2)).toHaveClass(/active/);
+    await expect(leftTabs.first()).not.toHaveClass(/active/);
   });
 });
 
@@ -62,7 +62,7 @@ test.describe("Intra-window tab drag between panes", () => {
 
     // Drag the first tab from left pane to right pane's tab bar
     const sourceTab = leftTabs.first();
-    const targetTabBar = rightContainer.locator(".mosaic-tab-bar.draggable");
+    const targetTabBar = rightContainer.locator(".tab-bar");
 
     await sourceTab.dragTo(targetTabBar, { force: true });
 
@@ -82,14 +82,14 @@ test.describe("Intra-window tab drag between panes", () => {
     // Drag first tab from left to right
     const sourceTab = leftContainer.locator(TAB_BUTTON).first();
     const sourceTitle = await sourceTab.textContent();
-    const targetTabBar = rightContainer.locator(".mosaic-tab-bar.draggable");
+    const targetTabBar = rightContainer.locator(".tab-bar");
     await sourceTab.dragTo(targetTabBar, { force: true });
 
     // The dragged tab should appear in the right pane
     const rightTabs = rightContainer.locator(TAB_BUTTON);
     await expect(rightTabs).toHaveCount(4);
     const rightTitles = await rightTabs.evaluateAll(
-      (els) => els.map((e) => e.querySelector(".mosaic-tab-label")?.textContent),
+      (els) => els.map((e) => e.querySelector(".tab-title")?.textContent),
     );
     expect(rightTitles.some((t) => t?.includes(sourceTitle ?? ""))).toBe(true);
   });
@@ -106,7 +106,7 @@ test.describe("Intra-window tab drag between panes", () => {
     const containers = page.locator(TABS_CONTAINER);
     for (let i = 0; i < 2; i++) {
       const tab = containers.first().locator(TAB_BUTTON).first();
-      const targetTabBar = containers.last().locator(".mosaic-tab-bar.draggable");
+      const targetTabBar = containers.last().locator(".tab-bar");
       await tab.dragTo(targetTabBar, { force: true });
       await page.waitForTimeout(500);
     }

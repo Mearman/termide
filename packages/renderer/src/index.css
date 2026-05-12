@@ -7,357 +7,188 @@
   --text-muted: #a6adc8;
   --accent: #89b4fa;
   --border: #585b70;
-  --drop-target: #89b4fa33;
+  --drop-target: rgba(137, 180, 250, 0.2);
 }
 
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
+* { margin: 0; padding: 0; box-sizing: border-box; }
 
 html, body, #root {
-  height: 100%;
-  width: 100%;
-  overflow: hidden;
+  height: 100%; width: 100%; overflow: hidden;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg-dark); color: var(--text-primary);
+  -webkit-user-select: none; user-select: none;
+}
+
+.error, .loading { padding: 20px; color: var(--text-muted); }
+.error { color: #c75d5d; }
+
+/* ─── Root layout ──────────────────────────────────────── */
+
+.layout-root {
+  height: 100%; width: 100%;
+  position: relative;
+}
+
+/* ─── Split containers ─────────────────────────────────── */
+
+.split {
+  display: flex; width: 100%; height: 100%;
+}
+.split-row { flex-direction: row; }
+.split-column { flex-direction: column; }
+
+.split-child {
+  flex-grow: 0; flex-shrink: 0;
+  overflow: hidden; min-width: 0; min-height: 0;
+}
+
+/* ─── Resize handles ───────────────────────────────────── */
+
+.resize-handle {
+  flex-shrink: 0; background: var(--border);
+  transition: background 0.15s;
+  z-index: 10;
+}
+.resize-handle:hover { background: var(--accent); }
+
+.resize-row {
+  width: 4px; cursor: col-resize;
+}
+.resize-column {
+  height: 4px; cursor: row-resize;
+}
+
+/* ─── Pane (tab bar + content) ─────────────────────────── */
+
+.pane {
+  display: flex; flex-direction: column;
+  height: 100%; width: 100%;
   background: var(--bg-dark);
-  color: var(--text-primary);
-  -webkit-user-select: none;
-  user-select: none;
 }
 
-/* ─── Mosaic overrides ─────────────────────────────────── */
+/* ─── Tab bar ──────────────────────────────────────────── */
 
-.mosaic {
-  background: var(--bg-dark) !important;
+.tab-bar {
+  display: flex; align-items: stretch;
+  background: var(--bg-dark);
+  border-bottom: 1px solid var(--border);
+  min-height: 36px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.tab-bar::-webkit-scrollbar { height: 3px; }
+.tab-bar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* Insertion indicator during drag — a 2px accent bar at the computed position */
+.tab-bar.drag-over::before {
+  content: "";
+  position: absolute;
+  /* Positioned via JS by setting --insert-index and computing offset */
 }
 
-.mosaic-tile {
-  margin: 1px;
+/* ─── Tab button ───────────────────────────────────────── */
+
+.tab-button {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 10px;
+  background: var(--bg-tab); color: var(--text-muted);
+  border: none; border-right: 1px solid var(--bg-dark);
+  font-size: 12px; cursor: grab; white-space: nowrap;
+  transition: background 0.1s;
+  position: relative;
+}
+.tab-button:hover { background: var(--bg-tab-active); }
+.tab-button.active { background: var(--bg-surface); color: var(--text-primary); }
+.tab-button:active { cursor: grabbing; }
+
+.tab-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+.tab-title {
+  max-width: 140px; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
 }
 
-.mosaic-split {
-  background: var(--border) !important;
+.tab-badge { font-size: 10px; }
+.tab-badge.preview { color: #a0c070; font-style: italic; }
+.tab-badge.dirty { color: #d4a05a; }
+
+.tab-close {
+  width: 16px; height: 16px; display: flex;
+  align-items: center; justify-content: center;
+  border-radius: 3px; font-size: 12px;
+  opacity: 0; cursor: pointer; flex-shrink: 0;
+  transition: opacity 0.1s;
 }
+.tab-button:hover .tab-close,
+.tab-button.active .tab-close { opacity: 0.6; }
+.tab-close:hover { opacity: 1 !important; background: var(--bg-tab); }
 
-.mosaic-split:hover {
-  background: var(--accent) !important;
+.tab-add {
+  background: none; border: none;
+  color: var(--text-muted); font-size: 18px;
+  cursor: pointer; padding: 0 10px;
+  transition: color 0.1s, background 0.1s;
 }
+.tab-add:hover { color: var(--text-primary); background: var(--bg-tab); }
 
-/* ─── Mosaic tile content ─────────────────────────────── */
+/* ─── Pane content ─────────────────────────────────────── */
 
-.mosaic-tile-content {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
+.pane-content {
+  flex: 1; overflow: auto;
   background: var(--bg-surface);
-  border-radius: 4px;
-  overflow: hidden;
 }
-
-.tile-body {
-  flex: 1;
-  overflow: auto;
-}
-
-/* ─── Content area ─────────────────────────────────────── */
 
 .content-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  display: flex; align-items: center; gap: 8px;
   padding: 8px 12px;
   border-bottom: 1px solid var(--border);
   font-size: 13px;
 }
 
-.content-colour-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.content-title {
-  font-weight: 500;
-}
+.content-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.content-title { font-weight: 500; }
 
 .content-badge {
-  font-size: 10px;
-  padding: 1px 6px;
-  border-radius: 3px;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
+  font-size: 10px; padding: 1px 6px; border-radius: 3px;
+  text-transform: uppercase; letter-spacing: 0.3px;
+}
+.content-badge.pinned { background: var(--bg-dark); color: var(--text-muted); }
+.content-badge.preview { background: #3a4a2a; color: #a0c070; }
+.content-badge.dirty { background: #4a3a1a; color: #d4a05a; }
+
+.content-action {
+  margin-left: auto; background: var(--bg-dark);
+  border: 1px solid var(--border); color: var(--text-muted);
+  font-size: 11px; padding: 2px 10px; border-radius: 3px; cursor: pointer;
+}
+.content-action:hover { color: var(--text-primary); border-color: var(--text-muted); }
+
+.content-empty {
+  padding: 20px; color: var(--text-muted); font-style: italic;
 }
 
-.content-badge.pinned {
-  background: var(--bg-dark);
-  color: var(--text-muted);
+/* ─── Context menu ─────────────────────────────────────── */
+
+.context-menu {
+  position: fixed; z-index: 1000;
+  background: var(--bg-surface); border: 1px solid var(--border);
+  border-radius: 4px; padding: 4px 0; min-width: 140px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
 }
-
-.content-badge.preview {
-  background: #3a4a2a;
-  color: #a0c070;
+.context-item {
+  display: block; width: 100%; padding: 6px 12px;
+  background: none; border: none; color: var(--text-primary);
+  font-size: 12px; text-align: left; cursor: pointer;
 }
-
-.content-badge.dirty {
-  background: #4a3a1a;
-  color: #d4a05a;
-}
-
-.content-action-button {
-  margin-left: auto;
-  background: var(--bg-dark);
-  border: 1px solid var(--border);
-  color: var(--text-muted);
-  font-size: 11px;
-  padding: 2px 10px;
-  border-radius: 3px;
-  cursor: pointer;
-}
-
-.content-action-button:hover {
-  color: var(--text-primary);
-  border-color: var(--text-muted);
-}
-
-/* ─── Tab colour dot (used in renderTabTitle) ──────────── */
-
-.tab-colour {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-/* ─── Mosaic tab bar styling ───────────────────────────── */
-
-.mosaic .mosaic-tabs {
-  background: var(--bg-dark) !important;
-  border-bottom: 1px solid var(--border) !important;
-}
-
-.mosaic .mosaic-tab-bar {
-  overflow-x: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
-}
-
-.mosaic .mosaic-tab-bar::-webkit-scrollbar {
-  height: 3px;
-}
-
-.mosaic .mosaic-tab-bar::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 2px;
-}
-
-.mosaic .mosaic-tab-bar-tabs {
-  flex-shrink: 0;
-}
-
-.mosaic .mosaic-tab-button {
-  background: var(--bg-tab) !important;
-  color: var(--text-muted) !important;
-  border: none !important;
-  border-radius: 4px 4px 0 0 !important;
-  padding: 4px 10px !important;
-  font-size: 12px !important;
-  margin-right: 1px !important;
-}
-
-.mosaic .mosaic-tab-button.-active {
-  background: var(--bg-surface) !important;
-  color: var(--text-primary) !important;
-}
-
-.mosaic .mosaic-tab-button:hover {
-  background: var(--bg-tab-active) !important;
-}
-
-/* Custom tab title rendering (renderTabTitle) */
-.mosaic-custom-tab-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.mosaic .mosaic-tab-label {
-  max-width: 120px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.mosaic-tab-badge {
-  font-size: 10px;
-}
-
-.preview-badge {
-  color: #a0c070;
-  font-style: italic;
-}
-
-.dirty-badge {
-  color: #d4a05a;
-}
-
-/* Hide mosaic's drag toolbar buttons (split, drag). Keep close + add. */
-.mosaic .mosaic-tab-toolbar-controls {
-  display: none !important;
-}
-
-/* ─── Blueprint.js theme purge ─────────────────────────── */
-/* Override mosaic-blueprint-theme styles with our dark theme. */
-
-/* Tile-level drop targets (content area — for split placement) */
-.mosaic-blueprint-theme .drop-target-container .drop-target,
-.mosaic .drop-target-container .drop-target {
-  background: var(--drop-target) !important;
-  transition: background 0.15s !important;
-}
-
-.mosaic-blueprint-theme .drop-target-container .drop-target.drop-target-hover,
-.mosaic .drop-target-container .drop-target.drop-target-hover {
-  background: rgba(137, 180, 250, 0.25) !important;
-}
-
-.mosaic .mosaic-preview {
-  background: var(--bg-dark) !important;
-  border: 1px solid var(--border) !important;
-  border-radius: 4px;
-}
-
-.mosaic .mosaic-preview .mosaic-window-toolbar {
-  background: var(--bg-surface) !important;
-  box-shadow: none !important;
-}
-
-.mosaic .mosaic-preview .mosaic-window-title {
-  color: var(--text-primary) !important;
-}
-
-.mosaic .mosaic-preview .mosaic-window-body {
-  background: var(--bg-surface) !important;
-  color: var(--text-muted) !important;
-}
-
-/* ─── Tab drop targets (between tabs during drag) ─────── */
-
-/* Mosaic's default CSS handles show/hide and sizing.
-   .tab-drop-target: display:none (hidden)
-   .tab-drop-target.dragging: display:flex, width:20px (shown during drag)
-   .tab-drop-target.tab-drop-target-hover: width:40px (hover highlight)
-   We only override colours to match our theme. */
-
-.mosaic .tab-drop-target .tab-drop-placeholder {
-  background: linear-gradient(135deg, var(--accent), #6fa8f5) !important;
-  box-shadow: 0 2px 8px rgba(137, 180, 250, 0.3) !important;
-  border-color: var(--text-primary) !important;
-}
-
-.mosaic .tab-drop-target .tab-drop-indicator.can-drop {
-  background: var(--accent) !important;
-}
-
-/* Tab bar whole-bar drop highlight */
-.mosaic .mosaic-tab-bar.tab-bar-drop-target-hover {
-  background: var(--drop-target) !important;
-}
-
-/* Style mosaic's close button */
-.mosaic .mosaic-tab-close-button {
-  background: none !important;
-  border: none !important;
-  color: var(--text-muted) !important;
-  font-size: 14px !important;
-  padding: 0 4px !important;
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.1s;
-  position: relative;
-}
-
-/* Blueprint icon span is empty without BP CSS — render our own × */
-.mosaic .mosaic-tab-close-button .bp5-icon {
-  display: none;
-}
-
-.mosaic .mosaic-tab-close-button::after {
-  content: "\00D7"; /* × */
-}
-
-.mosaic .mosaic-tab-button:hover .mosaic-tab-close-button,
-.mosaic .mosaic-tab-button.-active .mosaic-tab-close-button {
-  opacity: 1;
-}
-
-.mosaic .mosaic-tab-close-button:hover {
-  color: var(--text-primary) !important;
-}
-
-/* Style mosaic's + add tab button */
-.mosaic .mosaic-tab-add-button {
-  background: none !important;
-  border: none !important;
-  color: var(--text-muted) !important;
-  font-size: 18px !important;
-  padding: 0 10px !important;
-  cursor: pointer;
-}
-
-.mosaic .mosaic-tab-add-button:hover {
-  color: var(--text-primary) !important;
-  background: var(--bg-tab) !important;
-}
-
-/* Right-click context menu */
+.context-item:hover { background: var(--bg-tab); }
 
 /* ─── Cross-window drop overlay ────────────────────────── */
 
 .drop-overlay {
-  position: absolute;
-  inset: 0;
+  position: absolute; inset: 0;
   background: var(--drop-target);
   border: 2px dashed var(--accent);
-  border-radius: 4px;
-  z-index: 100;
+  border-radius: 4px; z-index: 100;
   pointer-events: none;
-}
-
-/* ─── Context menu ─────────────────────────────────────── */
-.tab-context-menu {
-  position: fixed;
-  z-index: 1000;
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 4px 0;
-  min-width: 140px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-}
-
-.tab-context-item {
-  display: block;
-  width: 100%;
-  padding: 6px 12px;
-  background: none;
-  border: none;
-  color: var(--text-primary);
-  font-size: 12px;
-  text-align: left;
-  cursor: pointer;
-}
-
-.tab-context-item:hover {
-  background: var(--bg-tab);
-}
-
-/* ─── Root container ───────────────────────────────────── */
-
-.mosaic-root-container {
-  height: 100%;
-  width: 100%;
-  position: relative;
 }
