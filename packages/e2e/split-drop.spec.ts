@@ -71,4 +71,36 @@ test.describe("Split-on-drop", () => {
     const paneCount = await page.locator(".pane").count();
     console.log("pane count:", paneCount);
   });
+
+  test("cannot split own pane when it is the only tab", async ({ page }) => {
+    await page.waitForLoadState("domcontentloaded");
+    await page.locator(TAB_BUTTON).first().waitFor({ timeout: 10_000 });
+
+    // Close all but one tab
+    const tabs = page.locator(TAB_BUTTON);
+    const count = await tabs.count();
+    for (let i = 1; i < count; i++) {
+      await tabs.nth(1).locator(".tab-close").click();
+      await page.waitForTimeout(100);
+    }
+    await expect(page.locator(TAB_BUTTON)).toHaveCount(1);
+
+    // Try to split by dragging to content area
+    const content = page.locator(".pane-content").first();
+    const contentBox = await content.boundingBox();
+    expect(contentBox).not.toBeNull();
+
+    const sourceTab = page.locator(TAB_BUTTON).first();
+    await sourceTab.dragTo(content, {
+      force: true,
+      targetPosition: { x: contentBox!.width * 0.9, y: contentBox!.height * 0.5 },
+    });
+
+    await page.waitForTimeout(500);
+
+    // Should still be a single pane
+    const layout = await page.evaluate(() => window.electronAPI.getInitialState());
+    expect(layout.layout.type).toBe("pane");
+    await expect(page.locator(".pane")).toHaveCount(1);
+  });
 });

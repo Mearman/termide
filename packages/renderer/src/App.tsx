@@ -131,7 +131,10 @@ export function App(): React.ReactElement | null {
     }
   }, [state, syncLayout]);
 
+  const draggedTabRef = useRef<string | null>(null);
+
   const handleTabDragStart = useCallback((e: React.DragEvent, tabId: string) => {
+    draggedTabRef.current = tabId;
     e.dataTransfer.setData("application/tab-id", tabId);
     e.dataTransfer.effectAllowed = "move";
     const tab = state?.tabs[tabId];
@@ -141,6 +144,7 @@ export function App(): React.ReactElement | null {
   }, [state, windowId]);
 
   const handleTabDragEnd = useCallback((e: React.DragEvent) => {
+    draggedTabRef.current = null;
     electron.tabDragEnd(e.dataTransfer.dropEffect === "none");
   }, []);
 
@@ -249,6 +253,7 @@ export function App(): React.ReactElement | null {
         onSplitPane={handleSplitPane}
         onOpenTab={handleOpenTab}
         onContextMenu={(tabId, x, y) => setContextMenu({ tabId, x, y })}
+        draggedTabId={draggedTabRef.current}
       />
       {dropOverlay && <div className="drop-overlay" />}
       {contextMenu !== undefined && (
@@ -277,6 +282,7 @@ interface Callbacks {
   onSplitPane: (targetPaneId: string, tabId: string, direction: "row" | "column", side: "before" | "after") => void;
   onOpenTab: (title: string) => void;
   onContextMenu: (tabId: string, x: number, y: number) => void;
+  draggedTabId: string | null;
 }
 
 // ─── Recursive layout ─────────────────────────────────────
@@ -359,6 +365,7 @@ function Split(props: {
               onSplitPane={props.onSplitPane}
               onOpenTab={props.onOpenTab}
               onContextMenu={props.onContextMenu}
+              draggedTabId={props.draggedTabId}
             />
           </div>
           {i < props.split.children.length - 1 && (
@@ -386,6 +393,7 @@ function Pane(props: {
 } & Callbacks): React.ReactElement {
   const { pane, tabs } = props;
   const pid = paneIdentity(pane);
+  const isOnlyTabInPane = props.draggedTabId !== null && pane.tabIds.length === 1 && pane.tabIds.includes(props.draggedTabId);
   const insertRef = useRef(-1);
   const [dragOver, setDragOver] = useState(false);
   const [insertIdx, setInsertIdx] = useState(-1);
@@ -488,6 +496,7 @@ function Pane(props: {
           e.dataTransfer.dropEffect = "move";
           setDragOver(false);
           setInsertIdx(-1);
+          if (isOnlyTabInPane) { setSplitZone(null); return; }
           setSplitZone(computeSplitZone(e.currentTarget, e.clientX, e.clientY));
         }}
         onDragLeave={e => {
@@ -500,9 +509,10 @@ function Pane(props: {
           if (tabId === "") return;
           e.preventDefault();
           e.stopPropagation();
-          const zone = computeSplitZone(e.currentTarget, e.clientX, e.clientY);
           setSplitZone(null);
-          if (zone === null) return; // centre — no-op
+          if (isOnlyTabInPane) return;
+          const zone = computeSplitZone(e.currentTarget, e.clientX, e.clientY);
+          if (zone === null) return;
           const dirMap: Record<string, ["row" | "column", "before" | "after"]> = {
             left: ["row", "before"],
             right: ["row", "after"],
