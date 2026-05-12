@@ -94,31 +94,28 @@ test.describe("Intra-window tab drag between panes", () => {
     expect(rightTitles.some((t) => t?.includes(sourceTitle ?? ""))).toBe(true);
   });
 
-  test("dragging all tabs out of a pane merges into one group", async ({ page }) => {
+  test("dragging tabs from one pane to another preserves all tabs", async ({ page }) => {
     await page.waitForLoadState("domcontentloaded");
     await page.locator(TAB_BUTTON).first().waitFor({ timeout: 10_000 });
 
+    // Verify initial state: 6 tabs across 2 tab groups
+    await expect(page.locator(TAB_BUTTON)).toHaveCount(6);
+    await expect(page.locator(TABS_CONTAINER)).toHaveCount(2);
+
+    // Drag 2 tabs from first pane to second pane
     const containers = page.locator(TABS_CONTAINER);
-    const leftContainer = containers.first();
-    const rightContainer = containers.last();
-
-    // Drag all 3 tabs from left pane to right pane.
-    // Each drag re-queries locators because the mosaic tree reshapes
-    // after each drop (containers may merge).
-    for (let i = 0; i < 3; i++) {
-      // Re-query: after drops, the container list may have changed
-      const currentContainers = page.locator(TABS_CONTAINER);
-      const count = await currentContainers.count();
-      if (count < 2) break; // already merged
-
-      const tab = currentContainers.first().locator(TAB_BUTTON).first();
-      const targetTabBar = currentContainers.last().locator(".mosaic-tab-bar.draggable");
+    for (let i = 0; i < 2; i++) {
+      const tab = containers.first().locator(TAB_BUTTON).first();
+      const targetTabBar = containers.last().locator(".mosaic-tab-bar.draggable");
       await tab.dragTo(targetTabBar, { force: true });
       await page.waitForTimeout(500);
     }
 
-    // All 6 tabs should be in a single tab group
-    const allTabs = page.locator(TAB_BUTTON);
-    await expect(allTabs).toHaveCount(6);
+    // All 6 tabs should still be present
+    await expect(page.locator(TAB_BUTTON)).toHaveCount(6);
+
+    // First pane should have 1 tab, second should have 5
+    await expect(containers.first().locator(TAB_BUTTON)).toHaveCount(1);
+    await expect(containers.last().locator(TAB_BUTTON)).toHaveCount(5);
   });
 });
