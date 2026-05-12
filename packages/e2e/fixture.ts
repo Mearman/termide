@@ -25,6 +25,10 @@ interface ElectronTestFixture {
   page: Page;
 }
 
+interface ViteFixture {
+  viteServer: { server: ViteDevServer; url: string };
+}
+
 /**
  * Build the preload script (IIFE via tsdown).
  * Run once per worker, not per test.
@@ -84,46 +88,46 @@ function electronBinaryPath(): string {
  *   3. Launching Electron with RENDERER_URL pointing at Vite
  *   4. Tearing everything down after the test
  */
-export const test = base.extend<ElectronTestFixture>({
-  electronApp: async ({}, use) => {
-    // 1. Build preload
+export const test = base.extend<ElectronTestFixture & ViteFixture>({
+  // Shared Vite server — created once per worker, reused across tests
+  viteServer: async ({}, use) => {
+    const { server, url } = await startRenderer();
+    await use({ server, url });
+    await server.close();
+  },
+
+  electronApp: async ({ viteServer }, use) => {
+    // 1. Build preload (once per worker)
     buildPreload();
 
-    // 2. Start Vite
-    const { server, url } = await startRenderer();
-
-    // 3. Launch Electron
+    // 2. Launch Electron (reuses shared Vite server)
     const executablePath = electronBinaryPath();
     const app = await electron.launch({
       args: [mainPackage, "--headless=new"],
       cwd: projectRoot,
       env: {
         ...process.env,
-        RENDERER_URL: url,
+        RENDERER_URL: viteServer.url,
         NODE_OPTIONS: "--experimental-strip-types",
       },
       executablePath,
     });
 
-    // 4. Provide to test
+    // 3. Provide to test
     await use(app);
 
-    // 5. Teardown with force-kill fallback
-    const teardown = async (): Promise<void> => {
-      await Promise.race([
-        app.close(),
-        new Promise<void>((resolve) => setTimeout(resolve, 3_000)),
-      ]);
-      try {
-        if (app.process()?.exitCode === null) {
-          app.process()?.kill("SIGKILL");
-        }
-      } catch {
-        // Process already exited
+    // 4. Teardown with force-kill fallback
+    await Promise.race([
+      app.close(),
+      new Promise<void>((resolve) => setTimeout(resolve, 3_000)),
+    ]);
+    try {
+      if (app.process()?.exitCode === null) {
+        app.process()?.kill("SIGKILL");
       }
-    };
-    await teardown();
-    await server.close();
+    } catch {
+      // Process already exited
+    }
   },
 
   page: async ({ electronApp }, use) => {
