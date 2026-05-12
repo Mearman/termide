@@ -81,7 +81,7 @@ test.describe("Intra-window tab drag between panes", () => {
 
     // Drag first tab from left to right
     const sourceTab = leftContainer.locator(TAB_BUTTON).first();
-    const sourceTitle = await sourceTab.textContent();
+    const sourceTitle = await sourceTab.locator(".tab-title").textContent();
     const targetTabBar = rightContainer.locator(".tab-bar");
     await sourceTab.dragTo(targetTabBar, { force: true });
 
