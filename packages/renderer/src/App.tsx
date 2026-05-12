@@ -141,16 +141,50 @@ export function App(): React.ReactElement | null {
   );
 
   // ─── Cross-window drag hooks ────────────────────────────
-  // TODO: Wire mosaic's react-dnd drag events to cross-window coordinator.
-  // Mosaic uses react-dnd internally. When a tab drag leaves the mosaic
-  // root element, we need to notify the main process via tabDragBegin.
-  // When the drag ends, call tabDragEnd. This requires either:
-  // 1. A custom renderTabToolbar with DraggableTab wrapper, or
-  // 2. A DOM event listener on the mosaic root for dragend/pointerup.
+  // Mosaic's react-dnd fires real DOM dragstart/dragend events.
+  // We listen on the root container via event delegation to detect
+  // when a tab drag begins (to notify the main process) and ends
+  // (to trigger cross-window handoff if the drop was outside).
 
-  // Listen for cross-window drag enter/leave from main process
-  // (These are forwarded from BroadcastChannel polling)
-  // TODO: Re-add when cross-window drag is wired up
+  const mosaicRootRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = mosaicRootRef.current;
+    if (el === null) return;
+
+    const handleDragStart = (e: DragEvent) => {
+      // Find the closest draggable tab button
+      const target = (e.target as HTMLElement).closest('.mosaic-tab-button[draggable="true"]');
+      if (target === null) return;
+      const tabId = target.getAttribute("title");
+      if (tabId === null) return;
+
+      // Look up tab data from current state
+      const tab = state?.tabs[tabId];
+      if (tab === undefined) return;
+
+      electron.tabDragBegin({
+        windowId,
+        tabId,
+        tabTitle: tab.title,
+        tabColour: tab.colour,
+        tabBounds: { x: 0, y: 0, width: 0, height: 0 },
+      });
+    };
+
+    const handleDragEnd = (e: DragEvent) => {
+      // dropEffect "none" means the drag left the window (cross-window)
+      const completed = e.dataTransfer?.dropEffect === "none";
+      electron.tabDragEnd(completed);
+    };
+
+    el.addEventListener("dragstart", handleDragStart);
+    el.addEventListener("dragend", handleDragEnd);
+    return () => {
+      el.removeEventListener("dragstart", handleDragStart);
+      el.removeEventListener("dragend", handleDragEnd);
+    };
+  }, [state, windowId]);
 
   if (error !== undefined) {
     return <div style={{ padding: 20, color: "#c75d5d" }}>Error: {error}</div>;
@@ -163,7 +197,7 @@ export function App(): React.ReactElement | null {
   const mosaicNode = toMosaicNode(state.layout);
 
   return (
-    <div className="mosaic-root-container">
+    <div className="mosaic-root-container" ref={mosaicRootRef}>
       <Mosaic<string>
         value={mosaicNode}
         onChange={handleMosaicChange}
