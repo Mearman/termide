@@ -430,12 +430,21 @@ export function Pane({
         onDrop={handleContentDrop}
       >
         {activeTab !== undefined ? (
-          <>
-            <span style={{ color: activeTab.colour }}>●</span>{" "}
-            {activeTab.title}
-          </>
+          <div className="content-header">
+            <span className="content-colour-dot" style={{ backgroundColor: activeTab.colour }} />
+            <span className="content-title">{activeTab.title}</span>
+            {activeTab.pinned && <span className="content-badge pinned">pinned</span>}
+            {activeTab.preview && <span className="content-badge preview">preview</span>}
+            {activeTab.dirty && <span className="content-badge dirty">modified</span>}
+            <button
+              className="content-action-button"
+              onClick={() => window.electronAPI.toggleTabDirty(activeTab.id)}
+            >
+              {activeTab.dirty ? "Save" : "Edit"}
+            </button>
+          </div>
         ) : (
-          "Select a tab"
+          <div className="content-empty">No tab selected</div>
         )}
 
         {/* Drop overlay — visible during cross-pane drag over content */}
