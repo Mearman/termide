@@ -5,6 +5,37 @@ const TAB_BUTTON = '.mosaic-tab-button[draggable="true"]';
 /** Selector for mosaic tab group containers. */
 const TABS_CONTAINER = ".mosaic-tabs-container";
 
+/**
+ * Perform a precise drag using page.mouse for react-dnd compatibility.
+ * React-dnd's HTML5 backend needs proper mousedown/mousemove/mouseup sequences.
+ */
+async function dragTab(
+  page: import("@playwright/test").Page,
+  source: import("@playwright/test").Locator,
+  target: import("@playwright/test").Locator,
+): Promise<void> {
+  const sourceBox = await source.boundingBox();
+  const targetBox = await target.boundingBox();
+  if (sourceBox === null || targetBox === null) return;
+
+  const startX = sourceBox.x + sourceBox.width / 2;
+  const startY = sourceBox.y + sourceBox.height / 2;
+  const endX = targetBox.x + targetBox.width / 2;
+  const endY = targetBox.y + targetBox.height / 2;
+
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  // Move in steps so react-dnd tracks the drag
+  const steps = 5;
+  for (let i = 1; i <= steps; i++) {
+    await page.mouse.move(
+      startX + (endX - startX) * (i / steps),
+      startY + (endY - startY) * (i / steps),
+    );
+  }
+  await page.mouse.up();
+}
+
 test.describe("Intra-window tab activation", () => {
   test("clicking a tab activates it", async ({ page }) => {
     await page.waitForLoadState("domcontentloaded");
@@ -60,11 +91,11 @@ test.describe("Intra-window tab drag between panes", () => {
     await expect(leftTabs).toHaveCount(3);
     await expect(rightTabs).toHaveCount(3);
 
-    // Drag the first tab from left pane and drop on right pane's tab bar
+    // Drag the first tab from left pane to right pane's tab bar
     const sourceTab = leftTabs.first();
     const targetTabBar = rightContainer.locator(".mosaic-tab-bar.draggable");
 
-    await sourceTab.dragTo(targetTabBar);
+    await dragTab(page, sourceTab, targetTabBar);
 
     // Left pane should now have 2 tabs, right pane should have 4
     await expect(leftContainer.locator(TAB_BUTTON)).toHaveCount(2);
@@ -85,7 +116,7 @@ test.describe("Intra-window tab drag between panes", () => {
 
     // Drag to the second tab in the right pane (should insert before it)
     const targetTab = rightContainer.locator(TAB_BUTTON).nth(1);
-    await sourceTab.dragTo(targetTab);
+    await dragTab(page, sourceTab, targetTab);
 
     // Right pane should now have 4 tabs
     await expect(rightContainer.locator(TAB_BUTTON)).toHaveCount(4);
@@ -108,7 +139,7 @@ test.describe("Intra-window tab drag between panes", () => {
     for (let i = 0; i < 3; i++) {
       const tab = leftContainer.locator(TAB_BUTTON).first();
       const targetTabBar = rightContainer.locator(".mosaic-tab-bar.draggable");
-      await tab.dragTo(targetTabBar);
+      await dragTab(page, tab, targetTabBar);
     }
 
     // Left pane should be gone — only 1 tab group remains
@@ -128,10 +159,9 @@ test.describe("Intra-window tab drag between panes", () => {
     // Drag first tab from left to right
     const sourceTab = leftContainer.locator(TAB_BUTTON).first();
     const targetTabBar = rightContainer.locator(".mosaic-tab-bar.draggable");
-    await sourceTab.dragTo(targetTabBar);
+    await dragTab(page, sourceTab, targetTabBar);
 
     // The dropped tab should be active in the right pane
-    // The dropped tab was README.md (the first tab from left)
     const rightTabs = rightContainer.locator(TAB_BUTTON);
     const activeTab = rightTabs.locator(".-active");
     await expect(activeTab).toContainText("README.md");
