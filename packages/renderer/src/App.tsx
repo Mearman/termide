@@ -10,8 +10,8 @@ const electron = window.electronAPI;
  * Convert our internal LayoutNode tree to react-mosaic v7's MosaicNode.
  *
  * Mapping:
- * - PaneNode with 1 tab → leaf node (just the tab ID string)
- * - PaneNode with N tabs → MosaicTabsNode
+ * - PaneNode → always MosaicTabsNode (even with 1 tab, so every pane
+ *   gets a tab bar with close/drag/+ capabilities)
  * - SplitNode → MosaicSplitNode (sizes → splitPercentages)
  */
 function toMosaicNode(layout: LayoutNode): MosaicNode<string> {
@@ -20,15 +20,10 @@ function toMosaicNode(layout: LayoutNode): MosaicNode<string> {
     const pinned = layout.pinnedTabIds.filter((id) => layout.tabIds.includes(id));
     const ordered = [...pinned, ...nonPinned];
 
-    if (ordered.length <= 1) {
-      // Single tab (or empty) → leaf node
-      return ordered[0] ?? "";
-    }
-
     return {
       type: "tabs",
-      tabs: ordered,
-      activeTabIndex: ordered.indexOf(layout.activeTabId),
+      tabs: ordered.length > 0 ? ordered : [""],
+      activeTabIndex: Math.max(0, ordered.indexOf(layout.activeTabId)),
     };
   }
 

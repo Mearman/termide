@@ -94,7 +94,7 @@ test.describe("Intra-window tab drag between panes", () => {
     expect(rightTitles.some((t) => t?.includes(sourceTitle ?? ""))).toBe(true);
   });
 
-  test("dragging all tabs out of a pane collapses it to a single group", async ({ page }) => {
+  test("dragging all tabs out of a pane merges into one group", async ({ page }) => {
     await page.waitForLoadState("domcontentloaded");
     await page.locator(TAB_BUTTON).first().waitFor({ timeout: 10_000 });
 
@@ -102,22 +102,16 @@ test.describe("Intra-window tab drag between panes", () => {
     const leftContainer = containers.first();
     const rightContainer = containers.last();
 
-    // Drag 2 tabs from left pane to right pane (3rd will collapse left to leaf)
-    for (let i = 0; i < 2; i++) {
+    // Drag all 3 tabs from left pane to right pane
+    for (let i = 0; i < 3; i++) {
       const tab = leftContainer.locator(TAB_BUTTON).first();
       const targetTabBar = rightContainer.locator(".mosaic-tab-bar.draggable");
       await tab.dragTo(targetTabBar, { force: true });
       await page.waitForTimeout(500);
     }
 
-    // After 2 drags, left has 1 tab. Mosaic reduces single-tab MosaicTabsNode
-    // to a leaf node (no tab bar). The layout is now a split with one tab
-    // group and one leaf tile.
-    // All 6 tab IDs are still in the mosaic, but only 5 appear as tab buttons
-    // (the 6th is a leaf tile rendered without a tab bar).
+    // All 6 tabs should be in a single tab group
     const allTabs = page.locator(TAB_BUTTON);
-    const count = await allTabs.count();
-    // 5 in the tab group + 1 as a leaf tile = 6 total
-    expect(count).toBeGreaterThanOrEqual(5);
+    await expect(allTabs).toHaveCount(6);
   });
 });
