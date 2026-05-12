@@ -62,7 +62,7 @@ test.describe("Intra-window tab drag between panes", () => {
 
     // Drag the first tab from left pane and drop on right pane's tab bar
     const sourceTab = leftTabs.first();
-    const targetTabBar = rightContainer.locator(".mosaic-tab-bar");
+    const targetTabBar = rightContainer.locator(".mosaic-tab-bar.draggable");
 
     await sourceTab.dragTo(targetTabBar);
 
@@ -107,7 +107,7 @@ test.describe("Intra-window tab drag between panes", () => {
     // Drag all 3 tabs from left pane to right pane
     for (let i = 0; i < 3; i++) {
       const tab = leftContainer.locator(TAB_BUTTON).first();
-      const targetTabBar = rightContainer.locator(".mosaic-tab-bar");
+      const targetTabBar = rightContainer.locator(".mosaic-tab-bar.draggable");
       await tab.dragTo(targetTabBar);
     }
 
@@ -127,7 +127,7 @@ test.describe("Intra-window tab drag between panes", () => {
 
     // Drag first tab from left to right
     const sourceTab = leftContainer.locator(TAB_BUTTON).first();
-    const targetTabBar = rightContainer.locator(".mosaic-tab-bar");
+    const targetTabBar = rightContainer.locator(".mosaic-tab-bar.draggable");
     await sourceTab.dragTo(targetTabBar);
 
     // The dropped tab should be active in the right pane
