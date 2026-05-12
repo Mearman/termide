@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import type { PaneNode, Tab } from "../types.ts";
 
 /** Data stored in dataTransfer during an intra-window tab drag. */
@@ -29,6 +29,7 @@ interface PaneProps {
   onMoveTabBetweenPanes: (tabId: string, fromPath: string, toPath: string, insertBeforeTabId?: string) => void;
   onSplitPane: (tabId: string, sourcePanePath: string, direction: "row" | "column") => void;
   onCloseTab: (tabId: string) => void;
+  onTogglePin: (tabId: string) => void;
 }
 
 export function Pane({
@@ -41,6 +42,7 @@ export function Pane({
   onMoveTabBetweenPanes,
   onSplitPane,
   onCloseTab,
+  onTogglePin,
 }: PaneProps): React.ReactElement {
   const [isExternalDragOver, setIsExternalDragOver] = useState(false);
   const [isLocalDragOver, setIsLocalDragOver] = useState(false);
@@ -328,40 +330,55 @@ export function Pane({
           const tab = tabs[tabId];
           if (tab === undefined) return null;
           const isActive = tabId === pane.activeTabId;
+          const isPinned = pane.pinnedTabIds.includes(tabId);
           const showLeftIndicator = insertIndicator?.tabId === tabId && insertIndicator.side === "left";
           const showRightIndicator = insertIndicator?.tabId === tabId && insertIndicator.side === "right";
 
+          // Show separator between last pinned tab and first unpinned tab
+          const isLastPinned = isPinned && index === pane.pinnedTabIds.length - 1;
+          const hasUnpinned = pane.tabIds.length > pane.pinnedTabIds.length;
+
           return (
-            <div
-              key={tabId}
-              data-testid="tab"
-              data-tab-id={tabId}
-              className={`tab${isActive ? " active" : ""}`}
-              draggable
-              onDragStart={(e) => handleDragStart(e, tabId, index)}
-              onDragEnd={handleDragEnd}
-              onClick={() => onSetActiveTab(tabId)}
-              onAuxClick={(e) => {
-                if (e.button === 1) {
-                  e.preventDefault();
-                  onCloseTab(tabId);
-                }
-              }}
-            >
-              {showLeftIndicator && <span className="tab-insert-indicator left" />}
-              <span className="tab-colour" style={{ background: tab.colour }} />
-              <span className="tab-label">{tab.title}</span>
-              <span
-                className="tab-close"
-                onClick={(e) => {
+            <React.Fragment key={tabId}>
+              <div
+                data-testid="tab"
+                data-tab-id={tabId}
+                className={`tab${isActive ? " active" : ""}${isPinned ? " pinned" : ""}`}
+                draggable
+                onDragStart={(e) => handleDragStart(e, tabId, index)}
+                onDragEnd={handleDragEnd}
+                onClick={() => onSetActiveTab(tabId)}
+                onDoubleClick={(e) => {
                   e.stopPropagation();
-                  onCloseTab(tabId);
+                  onTogglePin(tabId);
+                }}
+                onAuxClick={(e) => {
+                  if (e.button === 1) {
+                    e.preventDefault();
+                    onCloseTab(tabId);
+                  }
                 }}
               >
-                ×
-              </span>
-              {showRightIndicator && <span className="tab-insert-indicator right" />}
-            </div>
+                {showLeftIndicator && <span className="tab-insert-indicator left" />}
+                <span className="tab-colour" style={{ background: tab.colour }} />
+                {isPinned ? (
+                  <span className="tab-pin-icon" title={tab.title}>📌</span>
+                ) : (
+                  <span className="tab-label">{tab.title}</span>
+                )}
+                <span
+                  className="tab-close"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onCloseTab(tabId);
+                  }}
+                >
+                  ×
+                </span>
+                {showRightIndicator && <span className="tab-insert-indicator right" />}
+              </div>
+              {isLastPinned && hasUnpinned && <div className="tab-separator" />}
+            </React.Fragment>
           );
         })}
       </div>

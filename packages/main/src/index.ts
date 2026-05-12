@@ -32,6 +32,12 @@ ipcMain.on("tab-moved-intra", (_event, payload: TabMovedIntraPayload): void => {
   updateWindowLayout(payload.windowId, payload.layout);
 });
 
+ipcMain.on("toggle-tab-pin", (event, tabId: string): void => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (win === null) return;
+  toggleTabPin(win.id, tabId);
+});
+
 ipcMain.on("tab-drag-begin", (_event, payload: DragTabStartPayload): void => {
   startDrag(payload, handleDragComplete);
 });

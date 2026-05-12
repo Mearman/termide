@@ -33,6 +33,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.send("tab-moved-intra", data);
   },
 
+  /** Toggle whether a tab is pinned. */
+  toggleTabPin: (tabId) => {
+    ipcRenderer.send("toggle-tab-pin", tabId);
+  },
+
   /** Renderer tells main process a cross-window drag has begun. */
   tabDragBegin: (data) => {
     ipcRenderer.send("tab-drag-begin", data);

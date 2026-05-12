@@ -136,6 +136,43 @@ html, body, #root {
   opacity: 0.6;
 }
 
+/* ─── Pinned tab ───────────────────────────────────────── */
+
+.tab.pinned {
+  min-width: 38px;
+  max-width: 38px;
+  padding: 6px 8px;
+  justify-content: center;
+}
+
+.tab.pinned .tab-label,
+.tab.pinned .tab-close {
+  display: none;
+}
+
+.tab.pinned .tab-pin-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.tab.pinned:hover .tab-close {
+  display: flex;
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  background: var(--bg-tab);
+  opacity: 1;
+  z-index: 3;
+}
+
+.tab-separator {
+  width: 1px;
+  align-self: stretch;
+  margin: 4px 0;
+  background: var(--border);
+  flex-shrink: 0;
+}
+
 /* ─── Tab insertion indicator ──────────────────────────── */
 
 .tab-insert-indicator {

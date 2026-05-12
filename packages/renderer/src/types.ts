@@ -8,6 +8,7 @@ export interface ElectronAPI {
   onDragEnter: (callback: (data: { tabId: string }) => void) => () => void;
   onDragLeave: (callback: () => void) => () => void;
   tabMovedIntra: (data: { windowId: number; layout: LayoutNode }) => void;
+  toggleTabPin: (tabId: string) => void;
   tabDragBegin: (data: {
     windowId: number;
     tabId: string;
@@ -35,11 +36,14 @@ export interface Tab {
   id: string;
   title: string;
   colour: string;
+  pinned: boolean;
 }
 
 export interface PaneNode {
   type: "pane";
   tabIds: string[];
+  /** Tab IDs that are pinned. Always a subset of tabIds. Rendered first. */
+  pinnedTabIds: string[];
   activeTabId: string;
 }
 

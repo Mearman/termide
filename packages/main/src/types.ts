@@ -9,6 +9,8 @@ export interface Tab {
   id: string;
   title: string;
   colour: string;
+  /** Whether this tab is pinned (not subject to preview replacement). */
+  pinned: boolean;
 }
 
 // ─── Layout tree (within a single window) ─────────────────
@@ -18,6 +20,8 @@ export type LayoutNode = PaneNode | SplitNode;
 export interface PaneNode {
   type: "pane";
   tabIds: string[];
+  /** Tab IDs that are pinned. Always a subset of tabIds. Rendered first in the tab bar. */
+  pinnedTabIds: string[];
   activeTabId: string;
 }
 

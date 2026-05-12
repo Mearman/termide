@@ -2,6 +2,7 @@
  * Canonical application state. Lives in the main process.
  * Every mutation happens here; renderers receive snapshots.
  */
+import { BrowserWindow } from "electron";
 import type { AppState, LayoutNode, PaneNode, SplitNode, Tab } from "./types.ts";
 
 let nextTabId = 1;
@@ -10,13 +11,14 @@ function makeTabId(): string {
 }
 
 function makeTab(title: string, colour: string): Tab {
-  return { id: makeTabId(), title, colour };
+  return { id: makeTabId(), title, colour, pinned: false };
 }
 
 function makePane(...tabIds: string[]): PaneNode {
   return {
     type: "pane",
     tabIds,
+    pinnedTabIds: [],
     activeTabId: tabIds[0],
   };
 }
@@ -113,7 +115,7 @@ export function createWindowForTab(
 
   appState.windows[newWindowId] = {
     windowId: newWindowId,
-    layout: { type: "pane", tabIds: [tabId], activeTabId: tabId },
+    layout: { type: "pane", tabIds: [tabId], pinnedTabIds: [], activeTabId: tabId },
     tabs: { [tabId]: tab },
   };
 }
@@ -144,6 +146,73 @@ export function updateWindowLayout(
 function collectTabIds(node: LayoutNode): string[] {
   if (node.type === "pane") return [...node.tabIds];
   return node.children.flatMap(collectTabIds);
+}
+
+/**
+ * Toggle the pinned state of a tab in its containing pane.
+ * Pinned tabs are moved to the front of the pane's tab list.
+ */
+export function toggleTabPin(windowId: number, tabId: string): void {
+  const state = appState.windows[windowId];
+  if (state === undefined) return;
+
+  const pane = findPaneContainingTab(state.layout, tabId);
+  if (pane === undefined) return;
+
+  const tab = state.tabs[tabId];
+  if (tab === undefined) return;
+
+  tab.pinned = !tab.pinned;
+
+  if (tab.pinned) {
+    // Add to pinned list if not already there
+    if (!pane.pinnedTabIds.includes(tabId)) {
+      pane.pinnedTabIds.push(tabId);
+    }
+    // Move to front of tabIds
+    const idx = pane.tabIds.indexOf(tabId);
+    if (idx > 0) {
+      pane.tabIds.splice(idx, 1);
+      pane.tabIds.unshift(tabId);
+    }
+    // Ensure all pinned tabs come before unpinned
+    reorderPinnedFirst(pane);
+  } else {
+    // Remove from pinned list
+    const pinnedIdx = pane.pinnedTabIds.indexOf(tabId);
+    if (pinnedIdx !== -1) {
+      pane.pinnedTabIds.splice(pinnedIdx, 1);
+    }
+    reorderPinnedFirst(pane);
+  }
+
+  pushStateToWindow(windowId);
+}
+
+function reorderPinnedFirst(pane: PaneNode): void {
+  const pinned = pane.pinnedTabIds.filter((id) => pane.tabIds.includes(id));
+  const unpinned = pane.tabIds.filter((id) => !pane.pinnedTabIds.includes(id));
+  pane.tabIds = [...pinned, ...unpinned];
+}
+
+function findPaneContainingTab(node: LayoutNode, tabId: string): PaneNode | undefined {
+  if (node.type === "pane") {
+    return node.tabIds.includes(tabId) ? node : undefined;
+  }
+  for (const child of node.children) {
+    const found = findPaneContainingTab(child, tabId);
+    if (found !== undefined) return found;
+  }
+  return undefined;
+}
+
+function pushStateToWindow(windowId: number): void {
+  // Re-export for use by index.ts
+  const win = BrowserWindow.fromId(windowId);
+  const state = appState.windows[windowId];
+  if (win !== null && !win.isDestroyed() && state !== undefined) {
+    win.webContents.send("state-updated", state);
+  }
 }
 
 // ─── Layout tree helpers ──────────────────────────────────

@@ -142,6 +142,13 @@ export function App(): React.ReactElement | null {
     [state, pushLayout],
   );
 
+  const handleTogglePin = useCallback(
+    (tabId: string) => {
+      window.electronAPI.toggleTabPin(tabId);
+    },
+    [],
+  );
+
   if (error !== undefined) {
     return <div style={{ padding: 20, color: "#c75d5d" }}>Error: {error}</div>;
   }
@@ -161,6 +168,7 @@ export function App(): React.ReactElement | null {
         onMoveTabBetweenPanes={handleMoveTabBetweenPanes}
         onSplitPane={handleSplitPane}
         onCloseTab={handleCloseTab}
+        onTogglePin={handleTogglePin}
         onResize={handleResize}
       />
     </div>
@@ -178,6 +186,7 @@ interface LayoutRendererProps {
   onMoveTabBetweenPanes: (tabId: string, fromPath: string, toPath: string, insertBeforeTabId?: string) => void;
   onSplitPane: (tabId: string, sourcePath: string, direction: "row" | "column") => void;
   onCloseTab: (tabId: string) => void;
+  onTogglePin: (tabId: string) => void;
   onResize?: (splitPath: string, index: number, deltaPx: number) => void;
   path?: string;
 }
@@ -191,6 +200,7 @@ function LayoutRenderer({
   onMoveTabBetweenPanes,
   onSplitPane,
   onCloseTab,
+  onTogglePin,
   onResize,
   path = "root",
 }: LayoutRendererProps): React.ReactElement {
@@ -206,6 +216,7 @@ function LayoutRenderer({
         onMoveTabBetweenPanes={onMoveTabBetweenPanes}
         onSplitPane={(tabId, source, direction) => onSplitPane(tabId, source, path, direction)}
         onCloseTab={onCloseTab}
+        onTogglePin={onTogglePin}
       />
     );
   }
@@ -241,6 +252,7 @@ function LayoutRenderer({
               onMoveTabBetweenPanes={onMoveTabBetweenPanes}
               onSplitPane={onSplitPane}
               onCloseTab={onCloseTab}
+              onTogglePin={onTogglePin}
               onResize={onResize}
               path={`${path}.${i}`}
             />
@@ -323,6 +335,11 @@ function moveTabBetweenPanes(
   if (tabIdx === -1) return undefined;
 
   sourcePane.tabIds.splice(tabIdx, 1);
+  // Remove from source pinned list if pinned
+  const wasPinned = sourcePane.pinnedTabIds.includes(tabId);
+  if (wasPinned) {
+    sourcePane.pinnedTabIds.splice(sourcePane.pinnedTabIds.indexOf(tabId), 1);
+  }
   if (sourcePane.activeTabId === tabId) {
     sourcePane.activeTabId = sourcePane.tabIds[0] ?? "";
   }
@@ -341,6 +358,11 @@ function moveTabBetweenPanes(
     targetPane.tabIds.push(tabId);
   }
   targetPane.activeTabId = tabId;
+  // Preserve pinned status in new pane
+  if (wasPinned) {
+    targetPane.pinnedTabIds.push(tabId);
+    reorderPinnedFirst(targetPane);
+  }
 
   return cleanupEmptyPanes(cloned);
 }
@@ -372,6 +394,7 @@ function splitPane(
   const newChild: PaneNode = {
     type: "pane",
     tabIds: [tabId],
+    pinnedTabIds: [],
     activeTabId: tabId,
   };
 
@@ -478,6 +501,15 @@ function cleanupEmptyPanes(node: LayoutNode): LayoutNode {
     children: cleanedChildren,
     sizes: Array(n).fill(each),
   };
+}
+
+/**
+ * Reorder tabIds so pinned tabs come first, maintaining relative order.
+ */
+function reorderPinnedFirst(pane: PaneNode): void {
+  const pinned = pane.pinnedTabIds.filter((id) => pane.tabIds.includes(id));
+  const unpinned = pane.tabIds.filter((id) => !pane.pinnedTabIds.includes(id));
+  pane.tabIds = [...pinned, ...unpinned];
 }
 
 /**
