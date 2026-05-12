@@ -38,6 +38,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.send("toggle-tab-pin", tabId);
   },
 
+  /** Open a tab by title (preview model). */
+  openTab: (title) => {
+    ipcRenderer.send("open-tab", title);
+  },
+
   /** Renderer tells main process a cross-window drag has begun. */
   tabDragBegin: (data) => {
     ipcRenderer.send("tab-drag-begin", data);

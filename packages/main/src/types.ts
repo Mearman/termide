@@ -11,6 +11,8 @@ export interface Tab {
   colour: string;
   /** Whether this tab is pinned (not subject to preview replacement). */
   pinned: boolean;
+  /** Whether this is a preview tab (italic, temporary, replaced on next open). */
+  preview: boolean;
 }
 
 // ─── Layout tree (within a single window) ─────────────────

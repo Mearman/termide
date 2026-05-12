@@ -66,6 +66,16 @@ html, body, #root {
   min-height: 36px;
   overflow-x: auto;
   flex-shrink: 0;
+  scrollbar-width: thin;
+}
+
+.tab-bar::-webkit-scrollbar {
+  height: 3px;
+}
+
+.tab-bar::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 2px;
 }
 
 /* ─── Tab ──────────────────────────────────────────────── */
@@ -171,6 +181,37 @@ html, body, #root {
   margin: 4px 0;
   background: var(--border);
   flex-shrink: 0;
+}
+
+/* ─── Preview tab (italic, temporary) ──────────────────── */
+
+.tab.preview .tab-label {
+  font-style: italic;
+  color: var(--text-muted);
+}
+
+.tab.preview.active .tab-label {
+  color: var(--text-primary);
+}
+
+/* ─── New tab button ─────────────────────────────────── */
+
+.tab-new-button {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0 10px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  transition: color 0.1s, background 0.1s;
+}
+
+.tab-new-button:hover {
+  color: var(--text-primary);
+  background: var(--bg-tab);
 }
 
 /* ─── Tab insertion indicator ──────────────────────────── */

@@ -9,6 +9,8 @@ export interface ElectronAPI {
   onDragLeave: (callback: () => void) => () => void;
   tabMovedIntra: (data: { windowId: number; layout: LayoutNode }) => void;
   toggleTabPin: (tabId: string) => void;
+  /** Open a tab by title (preview model: replaces current preview, pins if already open). */
+  openTab: (title: string) => void;
   tabDragBegin: (data: {
     windowId: number;
     tabId: string;
@@ -37,6 +39,8 @@ export interface Tab {
   title: string;
   colour: string;
   pinned: boolean;
+  /** Preview tabs are italic and replaced on next open. */
+  preview: boolean;
 }
 
 export interface PaneNode {

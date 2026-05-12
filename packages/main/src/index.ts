@@ -5,7 +5,7 @@ import { app, BrowserWindow, ipcMain, screen } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createMainWindow, createWindowWithTab } from "./window-manager.ts";
-import { appState, updateWindowLayout, moveTabCrossWindow, registerWindow } from "./state.ts";
+import { appState, updateWindowLayout, moveTabCrossWindow, registerWindow, toggleTabPin, openTabInWindow } from "./state.ts";
 import { startDrag, endDrag, setDragTargetForTest, getDragTargetForTest, reportDragTargetEnter, reportDragTargetLeave } from "./drag-coordinator.ts";
 import type { TabMovedIntraPayload, DragTabStartPayload } from "./types.ts";
 
@@ -36,6 +36,12 @@ ipcMain.on("toggle-tab-pin", (event, tabId: string): void => {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (win === null) return;
   toggleTabPin(win.id, tabId);
+});
+
+ipcMain.on("open-tab", (event, title: string): void => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (win === null) return;
+  openTabInWindow(win.id, title);
 });
 
 ipcMain.on("tab-drag-begin", (_event, payload: DragTabStartPayload): void => {

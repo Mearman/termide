@@ -350,14 +350,20 @@ export function Pane({
               <div
                 data-testid="tab"
                 data-tab-id={tabId}
-                className={`tab${isActive ? " active" : ""}${isPinned ? " pinned" : ""}`}
+                className={`tab${isActive ? " active" : ""}${isPinned ? " pinned" : ""}${tab.preview ? " preview" : ""}`}
                 draggable
                 onDragStart={(e) => handleDragStart(e, tabId, index)}
                 onDragEnd={handleDragEnd}
                 onClick={() => onSetActiveTab(tabId)}
                 onDoubleClick={(e) => {
                   e.stopPropagation();
-                  onTogglePin(tabId);
+                  if (tab.preview) {
+                    // Pin the preview tab on double-click
+                    onTogglePin(tabId);
+                  } else {
+                    // Toggle pinned state
+                    onTogglePin(tabId);
+                  }
                 }}
                 onAuxClick={(e) => {
                   if (e.button === 1) {
@@ -388,6 +394,27 @@ export function Pane({
             </React.Fragment>
           );
         })}
+        {/* New tab button */}
+        <button
+          className="tab-new-button"
+          onClick={() => {
+            const titles = [
+              "new-file.ts",
+              "untitled.txt",
+              "scratch.md",
+              "notes.json",
+              "config.yaml",
+              "test.spec.ts",
+              "helper.ts",
+              "utils.ts",
+              "README.md",
+            ];
+            const title = titles[Math.floor(Math.random() * titles.length)];
+            window.electronAPI.openTab(title);
+          }}
+        >
+          +
+        </button>
       </div>
 
       {/* Content area with drop overlay */}

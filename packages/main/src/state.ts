@@ -11,7 +11,7 @@ function makeTabId(): string {
 }
 
 function makeTab(title: string, colour: string): Tab {
-  return { id: makeTabId(), title, colour, pinned: false };
+  return { id: makeTabId(), title, colour, pinned: false, preview: false };
 }
 
 function makePane(...tabIds: string[]): PaneNode {
@@ -165,6 +165,8 @@ export function toggleTabPin(windowId: number, tabId: string): void {
   tab.pinned = !tab.pinned;
 
   if (tab.pinned) {
+    // Pinning always clears preview status
+    tab.preview = false;
     // Add to pinned list if not already there
     if (!pane.pinnedTabIds.includes(tabId)) {
       pane.pinnedTabIds.push(tabId);
@@ -193,6 +195,84 @@ function reorderPinnedFirst(pane: PaneNode): void {
   const pinned = pane.pinnedTabIds.filter((id) => pane.tabIds.includes(id));
   const unpinned = pane.tabIds.filter((id) => !pane.pinnedTabIds.includes(id));
   pane.tabIds = [...pinned, ...unpinned];
+}
+
+/**
+ * Open a tab in the active pane of a window, following VSCode's preview model:
+ * - If there's an existing preview tab, replace it with the new one
+ * - Otherwise, add a new preview tab at the end of unpinned tabs
+ * - If the title matches a pinned tab, activate it instead
+ */
+export function openTabInWindow(windowId: number, title: string): void {
+  const state = appState.windows[windowId];
+  if (state === undefined) return;
+
+  // Find the active pane
+  const activePane = findActivePane(state.layout);
+  if (activePane === undefined) return;
+
+  // Check if the tab is already open (pinned or unpinned)
+  for (const tabId of activePane.tabIds) {
+    const tab = state.tabs[tabId];
+    if (tab !== undefined && tab.title === title) {
+      // Already open — activate it and pin if preview
+      if (tab.preview) {
+        tab.preview = false;
+        tab.pinned = true;
+        if (!activePane.pinnedTabIds.includes(tabId)) {
+          activePane.pinnedTabIds.push(tabId);
+          reorderPinnedFirst(activePane);
+        }
+      }
+      activePane.activeTabId = tabId;
+      pushStateToWindow(windowId);
+      return;
+    }
+  }
+
+  // Create a new preview tab
+  const colours = ["#4a90d9", "#7bc67e", "#d4a05a", "#c75d5d", "#9b6dbf", "#5db8a0"];
+  const colour = colours[Math.floor(Math.random() * colours.length)];
+  const newTab: Tab = {
+    id: makeTabId(),
+    title,
+    colour,
+    pinned: false,
+    preview: true,
+  };
+  state.tabs[newTab.id] = newTab;
+
+  // Replace existing preview tab, or append after pinned tabs
+  const existingPreviewIdx = activePane.tabIds.findIndex(
+    (id) => state.tabs[id]?.preview === true,
+  );
+  if (existingPreviewIdx !== -1) {
+    const oldId = activePane.tabIds[existingPreviewIdx]!;
+    delete state.tabs[oldId];
+    activePane.tabIds[existingPreviewIdx] = newTab.id;
+  } else {
+    // Insert after pinned tabs
+    const insertIdx = activePane.pinnedTabIds.length;
+    activePane.tabIds.splice(insertIdx, 0, newTab.id);
+  }
+  activePane.activeTabId = newTab.id;
+
+  pushStateToWindow(windowId);
+}
+
+function findActivePane(node: LayoutNode): PaneNode | undefined {
+  if (node.type === "pane") return node;
+  // Return the first pane that has an active tab, or the first pane
+  for (const child of node.children) {
+    const pane = findActivePane(child);
+    if (pane !== undefined && pane.activeTabId !== "") return pane;
+  }
+  // Fallback: return first pane
+  for (const child of node.children) {
+    const pane = findActivePane(child);
+    if (pane !== undefined) return pane;
+  }
+  return undefined;
 }
 
 function findPaneContainingTab(node: LayoutNode, tabId: string): PaneNode | undefined {
