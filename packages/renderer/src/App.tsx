@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import type { WindowStateFromMain, LayoutNode, Tab, PaneNode, SplitNode } from "./types.ts";
 import { Pane } from "./components/Pane.tsx";
 
@@ -101,6 +101,47 @@ export function App(): React.ReactElement | null {
     [state, pushLayout],
   );
 
+  const handleCloseTab = useCallback(
+    (tabId: string) => {
+      if (state === undefined) return;
+      const newLayout = closeTabInTree(state.layout, tabId);
+      if (newLayout !== undefined) {
+        const newTabs = { ...state.tabs };
+        delete newTabs[tabId];
+        setState({ ...state, layout: newLayout, tabs: newTabs });
+        electron.tabMovedIntra({ windowId, layout: newLayout });
+      }
+    },
+    [state, windowId],
+  );
+
+  const handleResize = useCallback(
+    (splitPath: string, childIndex: number, deltaPx: number) => {
+      if (state === undefined) return;
+      const cloned = structuredClone(state.layout);
+      const split = findSplitAtPath(cloned, splitPath);
+      if (split === undefined) return;
+
+      const sizes = [...split.sizes];
+      const totalSize = sizes.reduce((sum, s) => sum + s, 0);
+      // Estimate container size from the flex percentages
+      // deltaPx is relative, so convert to percentage
+      const pxToPercent = totalSize > 0 ? (deltaPx / totalSize) * 2 : 0;
+      const minSize = 5;
+      const transfer = Math.min(
+        Math.max(pxToPercent, -(sizes[childIndex]! - minSize)),
+        sizes[childIndex + 1]! - minSize,
+      );
+
+      sizes[childIndex] = (sizes[childIndex] ?? 50) + transfer;
+      sizes[childIndex + 1] = (sizes[childIndex + 1] ?? 50) - transfer;
+      split.sizes = sizes;
+
+      pushLayout(cloned);
+    },
+    [state, pushLayout],
+  );
+
   if (error !== undefined) {
     return <div style={{ padding: 20, color: "#c75d5d" }}>Error: {error}</div>;
   }
@@ -119,6 +160,8 @@ export function App(): React.ReactElement | null {
         onReorderTabs={handleReorderTabs}
         onMoveTabBetweenPanes={handleMoveTabBetweenPanes}
         onSplitPane={handleSplitPane}
+        onCloseTab={handleCloseTab}
+        onResize={handleResize}
       />
     </div>
   );
@@ -134,6 +177,8 @@ interface LayoutRendererProps {
   onReorderTabs: (panePath: string, tabId: string, fromIndex: number, toIndex: number) => void;
   onMoveTabBetweenPanes: (tabId: string, fromPath: string, toPath: string, insertBeforeTabId?: string) => void;
   onSplitPane: (tabId: string, sourcePath: string, direction: "row" | "column") => void;
+  onCloseTab: (tabId: string) => void;
+  onResize?: (splitPath: string, index: number, deltaPx: number) => void;
   path?: string;
 }
 
@@ -145,6 +190,8 @@ function LayoutRenderer({
   onReorderTabs,
   onMoveTabBetweenPanes,
   onSplitPane,
+  onCloseTab,
+  onResize,
   path = "root",
 }: LayoutRendererProps): React.ReactElement {
   if (node.type === "pane") {
@@ -158,9 +205,12 @@ function LayoutRenderer({
         onReorderTabs={(tabId, from, to) => onReorderTabs(path, tabId, from, to)}
         onMoveTabBetweenPanes={onMoveTabBetweenPanes}
         onSplitPane={(tabId, source, direction) => onSplitPane(tabId, source, path, direction)}
+        onCloseTab={onCloseTab}
       />
     );
   }
+
+  const childCount = node.children.length;
 
   return (
     <div
@@ -172,28 +222,37 @@ function LayoutRenderer({
         flexDirection: node.direction === "row" ? "row" : "column",
         height: "100%",
         width: "100%",
-        gap: 2,
       }}
     >
       {node.children.map((child, i) => (
-        <div
-          key={`${path}-${i}`}
-          style={{
-            flex: (node.sizes[i] ?? 50) / 100,
-            overflow: "hidden",
-          }}
-        >
-          <LayoutRenderer
-            node={child}
-            tabs={tabs}
-            windowId={windowId}
-            onSetActiveTab={onSetActiveTab}
-            onReorderTabs={onReorderTabs}
-            onMoveTabBetweenPanes={onMoveTabBetweenPanes}
-            onSplitPane={onSplitPane}
-            path={`${path}.${i}`}
-          />
-        </div>
+        <React.Fragment key={`${path}-${i}`}>
+          <div
+            style={{
+              flex: (node.sizes[i] ?? 50) / 100,
+              overflow: "hidden",
+            }}
+          >
+            <LayoutRenderer
+              node={child}
+              tabs={tabs}
+              windowId={windowId}
+              onSetActiveTab={onSetActiveTab}
+              onReorderTabs={onReorderTabs}
+              onMoveTabBetweenPanes={onMoveTabBetweenPanes}
+              onSplitPane={onSplitPane}
+              onCloseTab={onCloseTab}
+              onResize={onResize}
+              path={`${path}.${i}`}
+            />
+          </div>
+          {/* Resize handle between children */}
+          {i < childCount - 1 && (
+            <ResizeHandle
+              direction={node.direction}
+              onResize={(delta) => onResize?.(`${path}`, i, delta)}
+            />
+          )}
+        </React.Fragment>
       ))}
     </div>
   );
@@ -419,4 +478,103 @@ function cleanupEmptyPanes(node: LayoutNode): LayoutNode {
     children: cleanedChildren,
     sizes: Array(n).fill(each),
   };
+}
+
+/**
+ * Close a tab: remove it from whichever pane contains it.
+ * Collapse the tree if the parent split has fewer than 2 children left.
+ */
+function closeTabInTree(root: LayoutNode, tabId: string): LayoutNode | undefined {
+  const cloned = structuredClone(root);
+  const pane = findPaneContainingTab(cloned, tabId);
+  if (pane === undefined) return undefined;
+
+  const idx = pane.tabIds.indexOf(tabId);
+  if (idx === -1) return undefined;
+
+  pane.tabIds.splice(idx, 1);
+  if (pane.activeTabId === tabId) {
+    // Activate the next tab (prefer the one to the right, else left)
+    pane.activeTabId = pane.tabIds[Math.min(idx, pane.tabIds.length - 1)] ?? "";
+  }
+
+  return cleanupEmptyPanes(cloned);
+}
+
+/**
+ * Navigate the layout tree by dot-separated path and return the SplitNode.
+ */
+function findSplitAtPath(node: LayoutNode, path: string): SplitNode | undefined {
+  const segments = path.split(".");
+  let current: LayoutNode = node;
+
+  for (const segment of segments) {
+    if (segment === "root") continue;
+    const idx = parseInt(segment, 10);
+    if (isNaN(idx)) return undefined;
+    if (current.type === "pane") return undefined;
+    const child = current.children[idx];
+    if (child === undefined) return undefined;
+    current = child;
+  }
+
+  return current.type === "split" ? current : undefined;
+}
+
+/**
+ * Find the pane that contains the given tab ID.
+ */
+function findPaneContainingTab(node: LayoutNode, tabId: string): PaneNode | undefined {
+  if (node.type === "pane") {
+    return node.tabIds.includes(tabId) ? node : undefined;
+  }
+  for (const child of node.children) {
+    const found = findPaneContainingTab(child, tabId);
+    if (found !== undefined) return found;
+  }
+  return undefined;
+}
+
+// ─── Resize handle ────────────────────────────────────────
+
+interface ResizeHandleProps {
+  direction: "row" | "column";
+  onResize: (deltaPx: number) => void;
+}
+
+function ResizeHandle({ direction, onResize }: ResizeHandleProps): React.ReactElement {
+  const [active, setActive] = useState(false);
+  const startPos = useRef(0);
+
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      setActive(true);
+      startPos.current = direction === "row" ? e.clientX : e.clientY;
+
+      const handleMouseMove = (moveE: MouseEvent): void => {
+        const currentPos = direction === "row" ? moveE.clientX : moveE.clientY;
+        const delta = currentPos - startPos.current;
+        startPos.current = currentPos;
+        onResize(delta);
+      };
+
+      const handleMouseUp = (): void => {
+        setActive(false);
+        window.removeEventListener("mousemove", handleMouseMove);
+        window.removeEventListener("mouseup", handleMouseUp);
+      };
+
+      window.addEventListener("mousemove", handleMouseMove);
+      window.addEventListener("mouseup", handleMouseUp);
+    },
+    [direction, onResize],
+  );
+
+  return (
+    <div
+      className={`resize-handle resize-handle-${direction}${active ? " active" : ""}`}
+      onMouseDown={handleMouseDown}
+    />
+  );
 }

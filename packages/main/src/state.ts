@@ -120,6 +120,8 @@ export function createWindowForTab(
 
 /**
  * Update a window's layout after an intra-window tab move.
+ * Also removes any tabs from the window's tabs dict that are no longer
+ * referenced in the layout tree.
  */
 export function updateWindowLayout(
   windowId: number,
@@ -128,7 +130,20 @@ export function updateWindowLayout(
   const state = appState.windows[windowId];
   if (state !== undefined) {
     state.layout = newLayout;
+    // Collect tab IDs still referenced in the layout
+    const referencedIds = new Set(collectTabIds(newLayout));
+    // Remove tabs no longer referenced
+    for (const tabId of Object.keys(state.tabs)) {
+      if (!referencedIds.has(tabId)) {
+        delete state.tabs[tabId];
+      }
+    }
   }
+}
+
+function collectTabIds(node: LayoutNode): string[] {
+  if (node.type === "pane") return [...node.tabIds];
+  return node.children.flatMap(collectTabIds);
 }
 
 // ─── Layout tree helpers ──────────────────────────────────

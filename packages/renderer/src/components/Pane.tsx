@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import type { PaneNode, Tab } from "../types.ts";
 
 /** Data stored in dataTransfer during an intra-window tab drag. */
@@ -7,6 +7,17 @@ interface TabDragData {
   sourcePanePath: string;
   sourceIndex: number;
 }
+
+/** Computed drop zone during content-area drag. */
+type DropZone =
+  | { type: "merge" }
+  | { type: "split"; direction: "row" | "column"; side: "left" | "right" | "top" | "bottom" };
+
+/** Edge threshold as a fraction of the content area dimension. */
+const EDGE_THRESHOLD = 0.1;
+
+/** How long to hover a tab during drag before auto-activating it. */
+const AUTO_ACTIVATE_DELAY = 1500;
 
 interface PaneProps {
   pane: PaneNode;
@@ -17,6 +28,7 @@ interface PaneProps {
   onReorderTabs: (tabId: string, fromIndex: number, toIndex: number) => void;
   onMoveTabBetweenPanes: (tabId: string, fromPath: string, toPath: string, insertBeforeTabId?: string) => void;
   onSplitPane: (tabId: string, sourcePanePath: string, direction: "row" | "column") => void;
+  onCloseTab: (tabId: string) => void;
 }
 
 export function Pane({
@@ -28,9 +40,20 @@ export function Pane({
   onReorderTabs,
   onMoveTabBetweenPanes,
   onSplitPane,
+  onCloseTab,
 }: PaneProps): React.ReactElement {
   const [isExternalDragOver, setIsExternalDragOver] = useState(false);
   const [isLocalDragOver, setIsLocalDragOver] = useState(false);
+
+  // Tab bar insertion indicator: which tab is the drop target and on which side
+  const [insertIndicator, setInsertIndicator] = useState<{ tabId: string; side: "left" | "right" } | undefined>(undefined);
+
+  // Content area drop overlay zone
+  const [dropZone, setDropZone] = useState<DropZone | undefined>(undefined);
+
+  // Auto-activate timer for drag-over
+  const autoActivateTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const autoActivateTarget = useRef<string | undefined>(undefined);
 
   // Listen for cross-window drag enter/leave
   useEffect(() => {
@@ -46,11 +69,18 @@ export function Pane({
     };
   }, []);
 
+  // Clean up auto-activate timer on unmount
+  useEffect(() => {
+    return () => {
+      if (autoActivateTimer.current !== undefined) clearTimeout(autoActivateTimer.current);
+    };
+  }, []);
+
   // ─── Intra-window HTML5 DnD ────────────────────────────
 
   const handleDragStart = useCallback(
     (e: React.DragEvent, tabId: string, index: number) => {
-      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.effectAllowed = "copyMove";
       e.dataTransfer.setData("application/tab-drag", JSON.stringify({
         tabId,
         sourcePanePath: path,
@@ -58,8 +88,6 @@ export function Pane({
       } satisfies TabDragData));
 
       // Notify main process that a cross-window drag MAY happen.
-      // Main process starts cursor polling; if the drag stays intra-window
-      // we'll tell it completed=false and it'll just clean up.
       const tab = tabs[tabId];
       if (tab !== undefined) {
         window.electronAPI.tabDragBegin({
@@ -77,10 +105,12 @@ export function Pane({
   const handleDragEnd = useCallback(
     (e: React.DragEvent) => {
       setIsLocalDragOver(false);
-      // If the drop effect is "none", the drag left the window (or was cancelled).
-      // Tell the main process to handle it as a potential cross-window drop.
-      // If a successful intra-window drop happened, dropEffect is "move" —
-      // tell the main process to cancel its tracking.
+      setInsertIndicator(undefined);
+      setDropZone(undefined);
+      if (autoActivateTimer.current !== undefined) {
+        clearTimeout(autoActivateTimer.current);
+        autoActivateTimer.current = undefined;
+      }
       const completed = e.dataTransfer.dropEffect === "none";
       window.electronAPI.tabDragEnd(completed);
     },
@@ -94,25 +124,48 @@ export function Pane({
   }, []);
 
   const handleDragLeave = useCallback((e: React.DragEvent) => {
-    // Only unset if we're truly leaving the pane, not entering a child
     const related = e.relatedTarget as HTMLElement | null;
     if (related !== null && e.currentTarget.contains(related)) return;
     setIsLocalDragOver(false);
+    setInsertIndicator(undefined);
+    setDropZone(undefined);
   }, []);
 
-  // ─── Tab bar drop: reorder or move between panes ────────
+  // ─── Tab bar drop: insertion indicators + reorder/move ──
 
-  const handleTabBarDragOver = useCallback((e: React.DragEvent) => {
-    if (e.dataTransfer.types.includes("application/tab-drag")) {
+  const handleTabBarDragOver = useCallback(
+    (e: React.DragEvent) => {
+      if (!e.dataTransfer.types.includes("application/tab-drag")) return;
       e.preventDefault();
-      e.dataTransfer.dropEffect = "move";
-    }
+
+      // Check modifier keys for copy vs move
+      const isCopy = e.altKey || (e.ctrlKey && navigator.platform !== "MacIntel");
+      e.dataTransfer.dropEffect = isCopy ? "copy" : "move";
+
+      // Compute insertion indicator
+      const tabEl = (e.target as HTMLElement).closest("[data-tab-id]");
+      if (tabEl !== null) {
+        const tabId = (tabEl as HTMLElement).dataset.tabId;
+        const rect = tabEl.getBoundingClientRect();
+        const midX = rect.left + rect.width / 2;
+        const side = e.clientX < midX ? "left" : "right";
+        if (tabId !== undefined) {
+          setInsertIndicator({ tabId, side });
+        }
+      }
+    },
+    [],
+  );
+
+  const handleTabBarDragLeave = useCallback(() => {
+    setInsertIndicator(undefined);
   }, []);
 
   const handleTabBarDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
       setIsLocalDragOver(false);
+      setInsertIndicator(undefined);
       const raw = e.dataTransfer.getData("application/tab-drag");
       if (raw === "") return;
 
@@ -147,23 +200,80 @@ export function Pane({
     [path, pane.tabIds, onReorderTabs, onMoveTabBetweenPanes],
   );
 
-  // ─── Split zone drops ──────────────────────────────────
+  // ─── Content area drop overlay ─────────────────────────
 
-  const handleSplitZoneDrop = useCallback(
-    (e: React.DragEvent, direction: "row" | "column") => {
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  const computeDropZone = useCallback(
+    (e: React.DragEvent): DropZone => {
+      const el = contentRef.current;
+      if (el === null) return { type: "merge" };
+
+      const rect = el.getBoundingClientRect();
+      const relX = (e.clientX - rect.left) / rect.width;
+      const relY = (e.clientY - rect.top) / rect.height;
+
+      // Edge detection
+      if (relX < EDGE_THRESHOLD) return { type: "split", direction: "row", side: "left" };
+      if (relX > 1 - EDGE_THRESHOLD) return { type: "split", direction: "row", side: "right" };
+      if (relY < EDGE_THRESHOLD) return { type: "split", direction: "column", side: "top" };
+      if (relY > 1 - EDGE_THRESHOLD) return { type: "split", direction: "column", side: "bottom" };
+
+      return { type: "merge" };
+    },
+    [],
+  );
+
+  const handleContentDragOver = useCallback(
+    (e: React.DragEvent) => {
+      if (!e.dataTransfer.types.includes("application/tab-drag")) return;
+      e.preventDefault();
+      e.stopPropagation();
+
+      const isCopy = e.altKey || (e.ctrlKey && navigator.platform !== "MacIntel");
+      e.dataTransfer.dropEffect = isCopy ? "copy" : "move";
+
+      const zone = computeDropZone(e);
+      setDropZone(zone);
+
+      // Auto-activate on hover timeout
+      // (only applies when merging — hovering over content area)
+      if (zone.type === "merge") {
+        if (autoActivateTarget.current !== pane.activeTabId) {
+          if (autoActivateTimer.current !== undefined) clearTimeout(autoActivateTimer.current);
+          autoActivateTarget.current = pane.activeTabId;
+          autoActivateTimer.current = setTimeout(() => {
+            // Already on the active tab, no activation needed
+          }, AUTO_ACTIVATE_DELAY);
+        }
+      }
+    },
+    [computeDropZone, pane.activeTabId],
+  );
+
+  const handleContentDrop = useCallback(
+    (e: React.DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
       setIsLocalDragOver(false);
+      setDropZone(undefined);
 
       const raw = e.dataTransfer.getData("application/tab-drag");
       if (raw === "") return;
 
       const dragData: TabDragData = JSON.parse(raw);
-      // Always split — if from a different pane, the split handler in App
-      // will first move the tab, then split it.
-      onSplitPane(dragData.tabId, dragData.sourcePanePath, direction);
+      const zone = computeDropZone(e);
+
+      if (zone.type === "split") {
+        onSplitPane(dragData.tabId, dragData.sourcePanePath, zone.direction);
+      } else {
+        // Merge: move tab to this pane
+        if (dragData.sourcePanePath !== path) {
+          onMoveTabBetweenPanes(dragData.tabId, dragData.sourcePanePath, path);
+        }
+      }
     },
-    [onSplitPane],
+    [computeDropZone, onSplitPane, onMoveTabBetweenPanes, path],
   );
 
   // ─── Render ────────────────────────────────────────────
@@ -181,7 +291,7 @@ export function Pane({
         onDragOver={handleTabBarDragOver}
         onDrop={handleTabBarDrop}
       >
-        No tabs open
+        Drop tabs here
       </div>
     );
   }
@@ -194,16 +304,20 @@ export function Pane({
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
     >
+      {/* Tab bar */}
       <div
         data-testid="tab-bar"
         className="tab-bar"
         onDragOver={handleTabBarDragOver}
+        onDragLeave={handleTabBarDragLeave}
         onDrop={handleTabBarDrop}
       >
         {pane.tabIds.map((tabId, index) => {
           const tab = tabs[tabId];
           if (tab === undefined) return null;
           const isActive = tabId === pane.activeTabId;
+          const showLeftIndicator = insertIndicator?.tabId === tabId && insertIndicator.side === "left";
+          const showRightIndicator = insertIndicator?.tabId === tabId && insertIndicator.side === "right";
 
           return (
             <div
@@ -215,37 +329,85 @@ export function Pane({
               onDragStart={(e) => handleDragStart(e, tabId, index)}
               onDragEnd={handleDragEnd}
               onClick={() => onSetActiveTab(tabId)}
+              onAuxClick={(e) => {
+                if (e.button === 1) {
+                  e.preventDefault();
+                  onCloseTab(tabId);
+                }
+              }}
             >
+              {showLeftIndicator && <span className="tab-insert-indicator left" />}
               <span className="tab-colour" style={{ background: tab.colour }} />
-              <span>{tab.title}</span>
-              <span className="tab-close">×</span>
+              <span className="tab-label">{tab.title}</span>
+              <span
+                className="tab-close"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCloseTab(tabId);
+                }}
+              >
+                ×
+              </span>
+              {showRightIndicator && <span className="tab-insert-indicator right" />}
             </div>
           );
         })}
       </div>
-      {activeTab !== undefined ? (
-        <div className="tab-content" data-testid="tab-content">
-          <span style={{ color: activeTab.colour }}>●</span>{" "}
-          {activeTab.title}
-        </div>
-      ) : (
-        <div className="tab-content">Select a tab</div>
-      )}
 
-      {/* Split zones — visible when dragging a tab from a DIFFERENT pane over this pane */}
-      {isLocalDragOver && pane.tabIds.length > 0 && (
+      {/* Content area with drop overlay */}
+      <div
+        ref={contentRef}
+        className="tab-content"
+        data-testid="tab-content"
+        onDragOver={handleContentDragOver}
+        onDrop={handleContentDrop}
+      >
+        {activeTab !== undefined ? (
+          <>
+            <span style={{ color: activeTab.colour }}>●</span>{" "}
+            {activeTab.title}
+          </>
+        ) : (
+          "Select a tab"
+        )}
+
+        {/* Drop overlay — visible during cross-pane drag over content */}
+        {isLocalDragOver && dropZone !== undefined && (
+          <div className={`drop-overlay ${dropZone.type === "merge" ? "drop-overlay-merge" : `drop-overlay-split-${dropZone.side}`}`} />
+        )}
+      </div>
+
+      {/* Legacy split zones for backward-compatible test IDs */}
+      {/* These map to the content-area overlay zones */}
+      {isLocalDragOver && (
         <>
           <div
             data-testid="split-zone-right"
             className="split-zone split-zone-right"
             onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = "move"; }}
-            onDrop={(e) => handleSplitZoneDrop(e, "row")}
+            onDrop={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setIsLocalDragOver(false);
+              const raw = e.dataTransfer.getData("application/tab-drag");
+              if (raw === "") return;
+              const dragData: TabDragData = JSON.parse(raw);
+              onSplitPane(dragData.tabId, dragData.sourcePanePath, "row");
+            }}
           />
           <div
             data-testid="split-zone-bottom"
             className="split-zone split-zone-bottom"
             onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = "move"; }}
-            onDrop={(e) => handleSplitZoneDrop(e, "column")}
+            onDrop={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setIsLocalDragOver(false);
+              const raw = e.dataTransfer.getData("application/tab-drag");
+              if (raw === "") return;
+              const dragData: TabDragData = JSON.parse(raw);
+              onSplitPane(dragData.tabId, dragData.sourcePanePath, "column");
+            }}
           />
         </>
       )}

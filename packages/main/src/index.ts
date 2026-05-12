@@ -56,6 +56,7 @@ function handleDragComplete(result: {
       {},
     );
     pushStateToWindows(affected.affectedWindows);
+    closeWindowIfEmpty(result.sourceWindowId);
   } else {
     const newWin = createWindowWithTab(
       result.tabId,
@@ -67,7 +68,26 @@ function handleDragComplete(result: {
     } else {
       pushStateToWindows([result.sourceWindowId]);
     }
+    closeWindowIfEmpty(result.sourceWindowId);
   }
+}
+
+function closeWindowIfEmpty(windowId: number): void {
+  const state = appState.windows[windowId];
+  if (state === undefined) return;
+  const tabIds = collectAllTabIds(state.layout);
+  if (tabIds.length === 0) {
+    const win = BrowserWindow.fromId(windowId);
+    delete appState.windows[windowId];
+    if (win !== null && !win.isDestroyed()) {
+      win.close();
+    }
+  }
+}
+
+function collectAllTabIds(node: import("./types.ts").LayoutNode): string[] {
+  if (node.type === "pane") return [...node.tabIds];
+  return node.children.flatMap(collectAllTabIds);
 }
 
 // ─── Helpers ──────────────────────────────────────────────
@@ -90,6 +110,7 @@ ipcMain.handle("test-create-window", async (_event): Promise<number> => {
   const win = new BrowserWindow({
     width: 800,
     height: 600,
+    show: false,
     webPreferences: {
       preload: preloadPathForTest(),
       contextIsolation: true,

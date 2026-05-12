@@ -54,6 +54,7 @@ html, body, #root {
   background: var(--bg-surface);
   border-radius: 4px;
   overflow: hidden;
+  position: relative;
 }
 
 /* ─── Tab bar ──────────────────────────────────────────── */
@@ -67,11 +68,7 @@ html, body, #root {
   flex-shrink: 0;
 }
 
-.tab-bar.drag-over .tab-bar-drop-zone {
-  background: var(--drop-target);
-  outline: 2px dashed var(--accent);
-  outline-offset: -2px;
-}
+/* ─── Tab ──────────────────────────────────────────────── */
 
 .tab {
   display: flex;
@@ -105,6 +102,13 @@ html, body, #root {
   flex-shrink: 0;
 }
 
+.tab-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ─── Tab close button ─────────────────────────────────── */
+
 .tab-close {
   width: 16px;
   height: 16px;
@@ -116,6 +120,7 @@ html, body, #root {
   opacity: 0;
   cursor: pointer;
   transition: opacity 0.1s, background 0.1s;
+  flex-shrink: 0;
 }
 
 .tab:hover .tab-close {
@@ -127,6 +132,31 @@ html, body, #root {
   background: var(--bg-tab);
 }
 
+.tab.active .tab-close {
+  opacity: 0.6;
+}
+
+/* ─── Tab insertion indicator ──────────────────────────── */
+
+.tab-insert-indicator {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  background: var(--accent);
+  border-radius: 1px;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.tab-insert-indicator.left {
+  left: -1px;
+}
+
+.tab-insert-indicator.right {
+  right: -1px;
+}
+
 /* ─── Tab content ──────────────────────────────────────── */
 
 .tab-content {
@@ -136,6 +166,56 @@ html, body, #root {
   justify-content: center;
   font-size: 24px;
   color: var(--text-muted);
+  position: relative;
+  overflow: hidden;
+}
+
+/* ─── Drop overlay on content area ─────────────────────── */
+
+.drop-overlay {
+  position: absolute;
+  pointer-events: none;
+  z-index: 10;
+  background: var(--drop-target);
+  border: 2px dashed var(--accent);
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+
+.drop-overlay-merge {
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.drop-overlay-split-left {
+  top: 0;
+  left: 0;
+  width: 50%;
+  height: 100%;
+}
+
+.drop-overlay-split-right {
+  top: 0;
+  right: 0;
+  left: 50%;
+  width: 50%;
+  height: 100%;
+}
+
+.drop-overlay-split-top {
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 50%;
+}
+
+.drop-overlay-split-bottom {
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 50%;
 }
 
 /* ─── Empty pane ───────────────────────────────────────── */
@@ -149,19 +229,7 @@ html, body, #root {
   font-size: 14px;
 }
 
-/* ─── Drop zone indicator ──────────────────────────────── */
-
-.tab-bar-drop-zone {
-  flex: 1;
-  min-width: 40px;
-  transition: background 0.15s;
-}
-
-/* ─── Split zones ──────────────────────────────────────── */
-
-.pane {
-  position: relative;
-}
+/* ─── Legacy split zones (kept for test compatibility) ─── */
 
 .split-zone {
   position: absolute;
@@ -185,4 +253,28 @@ html, body, #root {
   left: 0;
   width: 100%;
   height: 30%;
+}
+
+/* ─── Resize handle ────────────────────────────────────── */
+
+.resize-handle {
+  background: var(--border);
+  transition: background 0.15s;
+  flex-shrink: 0;
+  z-index: 5;
+}
+
+.resize-handle:hover,
+.resize-handle.active {
+  background: var(--accent);
+}
+
+.resize-handle-row {
+  width: 4px;
+  cursor: col-resize;
+}
+
+.resize-handle-column {
+  height: 4px;
+  cursor: row-resize;
 }
