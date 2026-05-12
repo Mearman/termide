@@ -27,8 +27,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   tabMovedIntra: (data) => ipcRenderer.send("tab-moved-intra", data),
 
   toggleTabPin: (tabId) => ipcRenderer.send("toggle-tab-pin", tabId),
-  openTab: (title) => ipcRenderer.send("open-tab", title),
-  toggleTabDirty: (tabId) => ipcRenderer.send("toggle-tab-dirty", tabId),
+  openTab: (title) => ipcRenderer.invoke("open-tab", title),
+  toggleTabDirty: (tabId) => ipcRenderer.invoke("toggle-tab-dirty", tabId),
 
   tabDragBegin: (data) => ipcRenderer.send("tab-drag-begin", data),
   tabDragEnd: (completed) => ipcRenderer.send("tab-drag-end", completed),

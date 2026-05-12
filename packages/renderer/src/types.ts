@@ -10,9 +10,9 @@ export interface ElectronAPI {
   tabMovedIntra: (data: { windowId: number; layout: LayoutNode }) => void;
   toggleTabPin: (tabId: string) => void;
   /** Open a tab by title (preview model: replaces current preview, pins if already open). */
-  openTab: (title: string) => void;
+  openTab: (title: string) => Promise<void>;
   /** Toggle the dirty/modified state of a tab. */
-  toggleTabDirty: (tabId: string) => void;
+  toggleTabDirty: (tabId: string) => Promise<void>;
   tabDragBegin: (data: {
     windowId: number;
     tabId: string;
