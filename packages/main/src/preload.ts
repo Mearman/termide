@@ -54,4 +54,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
   testSetDragTarget: (windowId) => {
     return ipcRenderer.sendSync("test-set-drag-target", windowId);
   },
+
+  /** Move a window to specific screen coordinates for headed tests. */
+  testPositionWindow: (opts) => {
+    return ipcRenderer.sendSync("test-position-window", opts);
+  },
 });

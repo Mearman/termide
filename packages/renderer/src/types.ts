@@ -20,6 +20,7 @@ export interface ElectronAPI {
   // Test-only APIs
   testCreateWindow: () => Promise<number>;
   testSetDragTarget: (windowId: number | undefined) => number | undefined;
+  testPositionWindow: (opts: { windowId: number; x: number; y: number; width: number; height: number }) => boolean;
 }
 
 declare global {

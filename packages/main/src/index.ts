@@ -129,6 +129,18 @@ ipcMain.on("test-set-drag-target", (event, windowId: number | undefined): void =
   event.returnValue = actual;
 });
 
+/** Move a window to specific screen coordinates for headed tests. */
+ipcMain.on("test-position-window", (
+  event,
+  opts: { windowId: number; x: number; y: number; width: number; height: number },
+): void => {
+  const win = BrowserWindow.fromId(opts.windowId);
+  if (win !== null && !win.isDestroyed()) {
+    win.setBounds({ x: opts.x, y: opts.y, width: opts.width, height: opts.height });
+  }
+  event.returnValue = true;
+});
+
 // ─── App lifecycle ────────────────────────────────────────
 
 app.on("window-all-closed", (): void => {

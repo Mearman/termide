@@ -88,12 +88,22 @@ export function endDrag(completed: boolean): void {
     return;
   }
 
-  // Cross-window drag — figure out where the cursor is
+  // Cross-window drag — determine target window.
+  // Use the polled hoveredWindowId as a fast path, but also
+  // do a final hit-test with the current cursor position in case
+  // the polling interval missed a quick move.
   const cursor = screen.getCursorScreenPoint();
+  let targetId = activeDrag.hoveredWindowId;
+
+  if (targetId === undefined) {
+    // Polling didn't detect a target — do a one-shot check now
+    targetId = findWindowAtPoint(cursor, activeDrag.sourceWindowId);
+  }
+
   const result: DragResult = {
     tabId: activeDrag.tabId,
     sourceWindowId: activeDrag.sourceWindowId,
-    targetWindowId: activeDrag.hoveredWindowId,
+    targetWindowId: targetId,
     cursorPosition: cursor,
   };
 
@@ -126,30 +136,37 @@ function broadcastDragLeave(): void {
 }
 
 /**
+ * Find which non-source window contains the given screen point.
+ */
+function findWindowAtPoint(
+  point: { x: number; y: number },
+  sourceWindowId: number,
+): number | undefined {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (win.isDestroyed()) continue;
+    if (win.id === sourceWindowId) continue;
+
+    const bounds = win.getBounds();
+    if (
+      point.x >= bounds.x &&
+      point.x <= bounds.x + bounds.width &&
+      point.y >= bounds.y &&
+      point.y <= bounds.y + bounds.height
+    ) {
+      return win.id;
+    }
+  }
+  return undefined;
+}
+
+/**
  * Poll cursor and detect which non-source window the cursor is over.
  */
 function tick(): void {
   if (activeDrag === undefined) return;
 
   const cursor = screen.getCursorScreenPoint();
-  const windows = BrowserWindow.getAllWindows();
-
-  let newHoveredId: number | undefined;
-  for (const win of windows) {
-    if (win.isDestroyed()) continue;
-    if (win.id === activeDrag.sourceWindowId) continue;
-
-    const bounds = win.getBounds();
-    if (
-      cursor.x >= bounds.x &&
-      cursor.x <= bounds.x + bounds.width &&
-      cursor.y >= bounds.y &&
-      cursor.y <= bounds.y + bounds.height
-    ) {
-      newHoveredId = win.id;
-      break;
-    }
-  }
+  const newHoveredId = findWindowAtPoint(cursor, activeDrag.sourceWindowId);
 
   if (newHoveredId !== activeDrag.hoveredWindowId) {
     // Leave old target
