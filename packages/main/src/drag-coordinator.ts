@@ -19,6 +19,7 @@ export interface DragResult {
   tabId: string;
   sourceWindowId: number;
   targetWindowId: number | undefined;
+  targetPaneId: string | undefined;
   cursorPosition: { x: number; y: number };
 }
 
@@ -41,6 +42,8 @@ interface ActiveDrag {
   ghostPayload: DragTabStartPayload;
   /** Tick count since cursor left source window — used to debounce ghost creation. */
   ticksOutsideSource: number;
+  /** Pane ID in the target window that the cursor is over (reported by renderer). */
+  targetPaneId: string | undefined;
 }
 
 let activeDrag: ActiveDrag | undefined;
@@ -112,6 +115,15 @@ export function getDragTargetForTest(): number | undefined {
   return activeDrag?.hoveredWindowId;
 }
 
+export function setTargetPaneId(paneId: string): void {
+  if (activeDrag === undefined) return;
+  activeDrag.targetPaneId = paneId;
+}
+
+export function getTargetPaneId(): string | undefined {
+  return activeDrag?.targetPaneId;
+}
+
 // ─── Drag lifecycle ───────────────────────────────────────
 
 /**
@@ -141,6 +153,7 @@ export function startDrag(
     cursorOutsideSource: false,
     ghostPayload: payload,
     ticksOutsideSource: 0,
+    targetPaneId: undefined,
   };
 }
 
@@ -169,6 +182,7 @@ export function endDrag(completed: boolean): void {
     tabId: activeDrag.tabId,
     sourceWindowId: activeDrag.sourceWindowId,
     targetWindowId: targetId,
+    targetPaneId: activeDrag.targetPaneId,
     cursorPosition: cursor,
   };
 

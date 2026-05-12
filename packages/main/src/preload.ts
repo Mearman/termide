@@ -34,6 +34,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   tabDragEnd: (completed) => ipcRenderer.send("tab-drag-end", completed),
   dragTargetEnter: (windowId) => ipcRenderer.send("drag-target-enter", windowId),
   dragTargetLeave: (windowId) => ipcRenderer.send("drag-target-leave", windowId),
+  dragTargetPane: (paneId) => ipcRenderer.send("drag-target-pane", { paneId }),
 
   // ─── Test-only APIs ────────────────────────────────────
 

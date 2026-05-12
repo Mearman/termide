@@ -23,6 +23,7 @@ export interface ElectronAPI {
   tabDragEnd: (completed: boolean) => void;
   dragTargetEnter: (windowId: number) => void;
   dragTargetLeave: (windowId: number) => void;
+  dragTargetPane: (paneId: string) => void;
 
   // Test-only APIs
   testCreateWindow: () => Promise<number>;

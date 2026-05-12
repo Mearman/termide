@@ -82,7 +82,7 @@ export function moveTabCrossWindow(
   tabId: string,
   fromWindowId: number,
   toWindowId: number,
-  options: { insertBeforeTabId?: string },
+  options: { insertBeforeTabId?: string; targetPaneId?: string },
 ): { affectedWindows: number[] } {
   const fromState = appState.windows[fromWindowId];
   const toState = appState.windows[toWindowId];
@@ -100,7 +100,7 @@ export function moveTabCrossWindow(
 
   // Add tab to target window
   toState.tabs[tabId] = removedTab;
-  insertTabIntoLayout(toState.layout, tabId, options.insertBeforeTabId);
+  insertTabIntoLayout(toState.layout, tabId, options.insertBeforeTabId, options.targetPaneId);
 
   return { affectedWindows: [fromWindowId, toWindowId] };
 }
@@ -343,8 +343,11 @@ function insertTabIntoLayout(
   node: LayoutNode,
   tabId: string,
   insertBeforeTabId?: string,
+  targetPaneId?: string,
 ): boolean {
   if (node.type === "pane") {
+    const paneId = node.tabIds[0] ?? "__empty__";
+    if (targetPaneId !== undefined && paneId !== targetPaneId) return false;
     if (insertBeforeTabId !== undefined) {
       const idx = node.tabIds.indexOf(insertBeforeTabId);
       if (idx !== -1) {
@@ -359,9 +362,9 @@ function insertTabIntoLayout(
     return true;
   }
 
-  // SplitNode — try children in reverse order (rightmost/bottom first)
+  // SplitNode
   for (let i = node.children.length - 1; i >= 0; i--) {
-    if (insertTabIntoLayout(node.children[i], tabId, insertBeforeTabId)) {
+    if (insertTabIntoLayout(node.children[i], tabId, insertBeforeTabId, targetPaneId)) {
       return true;
     }
   }

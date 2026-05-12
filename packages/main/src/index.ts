@@ -11,7 +11,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createMainWindow, createWindowWithTab } from "./window-manager.ts";
 import { appState, updateWindowLayout, moveTabCrossWindow, registerWindow, toggleTabPin, openTabInWindow, pushStateToWindow } from "./state.ts";
-import { startDrag, endDrag, setDragTargetForTest, getDragTargetForTest, reportDragTargetEnter, reportDragTargetLeave, cleanupDragCoordinator } from "./drag-coordinator.ts";
+import { startDrag, endDrag, setDragTargetForTest, getDragTargetForTest, reportDragTargetEnter, reportDragTargetLeave, setTargetPaneId, cleanupDragCoordinator } from "./drag-coordinator.ts";
 import type { TabMovedIntraPayload, DragTabStartPayload } from "./types.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -76,12 +76,17 @@ ipcMain.on("drag-target-leave", (_event, windowId: number): void => {
   reportDragTargetLeave(windowId);
 });
 
+ipcMain.on("drag-target-pane", (_event, data: { paneId: string }): void => {
+  setTargetPaneId(data.paneId);
+});
+
 // ─── Drag completion (cross-window) ───────────────────────
 
 function handleDragComplete(result: {
   tabId: string;
   sourceWindowId: number;
   targetWindowId: number | undefined;
+  targetPaneId: string | undefined;
   cursorPosition: { x: number; y: number };
 }): void {
   if (result.targetWindowId !== undefined) {
@@ -89,7 +94,7 @@ function handleDragComplete(result: {
       result.tabId,
       result.sourceWindowId,
       result.targetWindowId,
-      {},
+      { targetPaneId: result.targetPaneId },
     );
     pushStateToWindows(affected.affectedWindows);
     closeWindowIfEmpty(result.sourceWindowId);

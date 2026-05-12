@@ -85,6 +85,25 @@ export function App(): React.ReactElement | null {
     return () => { e(); l(); };
   }, []);
 
+  // Track which pane the cursor is over during a cross-window drag
+  useEffect(() => {
+    if (!dropOverlay) return;
+    const handleMove = (ev: MouseEvent) => {
+      const panes = document.elementsFromPoint(ev.clientX, ev.clientY);
+      for (const el of panes) {
+        if (el instanceof HTMLElement && el.classList.contains("pane")) {
+          const paneId = el.dataset.paneId;
+          if (paneId !== undefined) {
+            electron.dragTargetPane(paneId);
+            return;
+          }
+        }
+      }
+    };
+    window.addEventListener("mousemove", handleMove);
+    return () => window.removeEventListener("mousemove", handleMove);
+  }, [dropOverlay]);
+
   useEffect(() => {
     if (contextMenu === undefined) return;
     const h = () => setContextMenu(undefined);
@@ -429,7 +448,7 @@ function Pane(props: {
   };
 
   return (
-    <div className="pane">
+    <div className="pane" data-pane-id={pid}>
       <div
         className={`tab-bar${dragOver ? " drag-over" : ""}`}
         onDragOver={e => {
