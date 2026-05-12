@@ -59,10 +59,12 @@ async function startRenderer(): Promise<{ server: ViteDevServer; url: string }> 
 
 /**
  * Path to the Electron binary.
+ * Resolved from the main package where electron is declared.
  */
 function electronBinaryPath(): string {
-  // require('electron') returns the path to the binary as a string
-  return require("electron") as unknown as string;
+  const mainPkg = path.join(projectRoot, "packages", "main");
+  const mainRequire = createRequire(path.join(mainPkg, "package.json"));
+  return mainRequire("electron") as unknown as string;
 }
 
 /**
