@@ -190,6 +190,7 @@ export function endDrag(completed: boolean): void {
   teardown();
   broadcastDragLeave();
   handler(result);
+  broadcastDragLeave();
 }
 
 function cancelDrag(): void {

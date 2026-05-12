@@ -121,7 +121,7 @@ function closeWindowIfEmpty(windowId: number): void {
     const win = BrowserWindow.fromId(windowId);
     delete appState.windows[windowId];
     if (win !== null && !win.isDestroyed()) {
-      win.close();
+      win.destroy();
     }
   }
 }

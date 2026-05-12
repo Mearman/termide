@@ -77,13 +77,33 @@ export function App(): React.ReactElement | null {
     if (init !== undefined) setState(init);
   }, []);
 
-  useEffect(() => { return electron.onStateUpdated(s => setState(s)); }, []);
+  useEffect(() => {
+    return electron.onStateUpdated(s => {
+      setState(s);
+      setDropOverlay(false);
+    });
+  }, []);
 
   useEffect(() => {
     const e = electron.onDragEnter(() => setDropOverlay(true));
     const l = electron.onDragLeave(() => setDropOverlay(false));
     return () => { e(); l(); };
   }, []);
+
+  useEffect(() => {
+    if (!dropOverlay) return;
+    const clearOverlay = () => setDropOverlay(false);
+    window.addEventListener("mouseup", clearOverlay);
+    window.addEventListener("drop", clearOverlay);
+    window.addEventListener("dragend", clearOverlay);
+    window.addEventListener("blur", clearOverlay);
+    return () => {
+      window.removeEventListener("mouseup", clearOverlay);
+      window.removeEventListener("drop", clearOverlay);
+      window.removeEventListener("dragend", clearOverlay);
+      window.removeEventListener("blur", clearOverlay);
+    };
+  }, [dropOverlay]);
 
   // Track which pane the cursor is over during a cross-window drag
   useEffect(() => {

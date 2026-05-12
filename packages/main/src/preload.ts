@@ -9,13 +9,15 @@ contextBridge.exposeInMainWorld("electronAPI", {
   getInitialState: () => ipcRenderer.sendSync("get-initial-state"),
 
   onStateUpdated: (callback) => {
-    ipcRenderer.on("state-updated", (_event, state) => callback(state));
-    return () => ipcRenderer.removeListener("state-updated", callback);
+    const handler = (_event, state) => callback(state);
+    ipcRenderer.on("state-updated", handler);
+    return () => ipcRenderer.removeListener("state-updated", handler);
   },
 
   onDragEnter: (callback) => {
-    ipcRenderer.on("drag-enter", (_event, data) => callback(data));
-    return () => ipcRenderer.removeListener("drag-enter", callback);
+    const handler = (_event, data) => callback(data);
+    ipcRenderer.on("drag-enter", handler);
+    return () => ipcRenderer.removeListener("drag-enter", handler);
   },
 
   onDragLeave: (callback) => {

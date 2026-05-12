@@ -322,4 +322,56 @@ test.describe("Cross-window tab drag", () => {
     // 3 new windows + original = 4 total
     expect(electronApp.windows().length).toBe(4);
   });
+
+  test("moving the only tab back to the main window closes the source and clears overlay", async ({
+    electronApp,
+    page: page1,
+  }) => {
+    await waitForTabs(page1, 6);
+
+    const page1WindowId = await page1.evaluate(() => window.electronAPI.getWindowId());
+    const [tabId] = await getTabIds(page1);
+    expect(tabId).not.toBeUndefined();
+
+    await page1.evaluate((id) => {
+      window.electronAPI.tabDragBegin({
+        windowId: window.electronAPI.getWindowId(),
+        tabId: id,
+        tabTitle: "test",
+        tabColour: "#fff",
+        tabBounds: { x: 0, y: 0, width: 100, height: 30 },
+      });
+      window.electronAPI.tabDragEnd(true);
+    }, tabId);
+
+    await electronApp.waitForEvent("window", { timeout: 15_000 });
+    const page2 = electronApp.windows().find((w) => w !== page1)!;
+    await waitForTabs(page2, 1);
+    const page2WindowId = await page2.evaluate(() => window.electronAPI.getWindowId());
+    const [returningTabId] = await getTabIds(page2);
+    expect(returningTabId).not.toBeUndefined();
+
+    await page2.evaluate((data) => {
+      window.electronAPI.tabDragBegin({
+        windowId: data.sourceWindowId,
+        tabId: data.tabId,
+        tabTitle: "test",
+        tabColour: "#fff",
+        tabBounds: { x: 0, y: 0, width: 100, height: 30 },
+      });
+    }, { sourceWindowId: page2WindowId, tabId: returningTabId });
+
+    await page1.evaluate((targetWindowId) => {
+      window.electronAPI.dragTargetEnter(targetWindowId);
+    }, page1WindowId);
+    await expect(page1.locator(".drop-overlay")).toHaveCount(1);
+
+    await page2.evaluate(() => {
+      window.electronAPI.tabDragEnd(true);
+    });
+
+    await expect(page1.locator(".drop-overlay")).toHaveCount(0);
+    await expect.poll(() => electronApp.windows().length, { timeout: 10_000 }).toBe(1);
+    await expect(page1.locator(TAB_BUTTON)).toHaveCount(6);
+  });
 });
