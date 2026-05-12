@@ -43,13 +43,13 @@ ipcMain.on("toggle-tab-pin", (event, tabId: string): void => {
   toggleTabPin(win.id, tabId);
 });
 
-ipcMain.handle("open-tab", (event, title: string): void => {
+ipcMain.on("open-tab", (event, title: string): void => {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (win === null) return;
   openTabInWindow(win.id, title);
 });
 
-ipcMain.handle("toggle-tab-dirty", (event, tabId: string): void => {
+ipcMain.on("toggle-tab-dirty", (event, tabId: string): void => {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (win === null) return;
   const state = appState.windows[win.id];
