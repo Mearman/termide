@@ -107,8 +107,8 @@ test.describe("Intra-window tab drag between panes", () => {
       const tab = leftContainer.locator(TAB_BUTTON).first();
       const targetTabBar = rightContainer.locator(".mosaic-tab-bar.draggable");
       await tab.dragTo(targetTabBar, { force: true });
-      // Brief pause to let mosaic process the drop
-      await page.waitForTimeout(200);
+      // Wait for mosaic to process the drop (tab count changes)
+      await page.waitForTimeout(500);
     }
 
     // All tabs should be in a single tab group (6 total)
