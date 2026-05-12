@@ -16,6 +16,11 @@ import type { TabMovedIntraPayload, DragTabStartPayload } from "./types.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const mainPackage = path.resolve(__dirname, "..");
+const CROSS_WINDOW_SPLIT_EDGE_RATIO = 0.25;
+
+type CrossWindowDropResolution =
+  | { kind: "insert"; paneId: string }
+  | { kind: "split"; paneId: string; direction: "row" | "column"; side: "before" | "after" };
 
 function preloadPathForTest(): string {
   return path.join(mainPackage, "dist", "preload.iife.js");
@@ -92,12 +97,21 @@ async function handleDragComplete(result: {
   cursorPosition: { x: number; y: number };
 }): Promise<void> {
   if (result.targetWindowId !== undefined) {
-    const resolvedTargetPaneId = await resolveTargetPaneId(result.targetWindowId, result.cursorPosition);
+    const dropResolution = await resolveCrossWindowDrop(result.targetWindowId, result.cursorPosition);
     const affected = moveTabCrossWindow(
       result.tabId,
       result.sourceWindowId,
       result.targetWindowId,
-      { targetPaneId: resolvedTargetPaneId ?? result.targetPaneId },
+      {
+        targetPaneId: dropResolution?.paneId ?? result.targetPaneId,
+        splitTarget: dropResolution?.kind === "split"
+          ? {
+              paneId: dropResolution.paneId,
+              direction: dropResolution.direction,
+              side: dropResolution.side,
+            }
+          : undefined,
+      },
     );
     pushStateToWindows(affected.affectedWindows);
     closeWindowIfEmpty(result.sourceWindowId);
@@ -116,10 +130,10 @@ async function handleDragComplete(result: {
   }
 }
 
-async function resolveTargetPaneId(
+async function resolveCrossWindowDrop(
   windowId: number,
   cursorPosition: { x: number; y: number },
-): Promise<string | undefined> {
+): Promise<CrossWindowDropResolution | undefined> {
   const win = BrowserWindow.fromId(windowId);
   if (win === null || win.isDestroyed()) return undefined;
 
@@ -131,18 +145,56 @@ async function resolveTargetPaneId(
   }
 
   const script = `(() => {
-    const pane = document.elementsFromPoint(${JSON.stringify(clientX)}, ${JSON.stringify(clientY)})
-      .find((el) => el instanceof HTMLElement && el.classList.contains("pane"));
-    return pane instanceof HTMLElement ? pane.dataset.paneId : undefined;
+    const element = document.elementFromPoint(${JSON.stringify(clientX)}, ${JSON.stringify(clientY)});
+    if (!(element instanceof HTMLElement)) return undefined;
+    const pane = element.closest(".pane");
+    if (!(pane instanceof HTMLElement)) return undefined;
+    const paneId = pane.dataset.paneId;
+    if (paneId === undefined || paneId.length === 0) return undefined;
+
+    const content = element.closest(".pane-content");
+    if (content instanceof HTMLElement && pane.contains(content)) {
+      const rect = content.getBoundingClientRect();
+      const rx = (${JSON.stringify(clientX)} - rect.left) / rect.width;
+      const ry = (${JSON.stringify(clientY)} - rect.top) / rect.height;
+      const distances = [
+        { zone: "left", distance: rx },
+        { zone: "right", distance: 1 - rx },
+        { zone: "top", distance: ry },
+        { zone: "bottom", distance: 1 - ry },
+      ];
+      const closest = distances.reduce((a, b) => a.distance < b.distance ? a : b);
+      if (closest.distance < ${CROSS_WINDOW_SPLIT_EDGE_RATIO}) {
+        if (closest.zone === "left") return { kind: "split", paneId, direction: "row", side: "before" };
+        if (closest.zone === "right") return { kind: "split", paneId, direction: "row", side: "after" };
+        if (closest.zone === "top") return { kind: "split", paneId, direction: "column", side: "before" };
+        return { kind: "split", paneId, direction: "column", side: "after" };
+      }
+    }
+
+    return { kind: "insert", paneId };
   })()`;
 
   try {
     const value: unknown = await win.webContents.executeJavaScript(script, true);
-    return typeof value === "string" && value.length > 0 ? value : undefined;
+    return isCrossWindowDropResolution(value) ? value : undefined;
   } catch (error) {
-    console.error("Failed to resolve cross-window target pane", error);
+    console.error("Failed to resolve cross-window drop", error);
     return undefined;
   }
+}
+
+function isCrossWindowDropResolution(value: unknown): value is CrossWindowDropResolution {
+  if (typeof value !== "object" || value === null) return false;
+  if (!("kind" in value) || !("paneId" in value)) return false;
+  if (typeof value.paneId !== "string" || value.paneId.length === 0) return false;
+  if (value.kind === "insert") return true;
+  if (value.kind !== "split") return false;
+  if (!("direction" in value) || !("side" in value)) return false;
+  return (
+    (value.direction === "row" || value.direction === "column") &&
+    (value.side === "before" || value.side === "after")
+  );
 }
 
 function closeWindowIfEmpty(windowId: number): void {

@@ -5,6 +5,9 @@
 import { BrowserWindow } from "electron";
 import type { AppState, LayoutNode, PaneNode, SplitNode, Tab } from "./types.ts";
 
+const FULL_PERCENT = 100;
+const EQUAL_SPLIT_PERCENT = FULL_PERCENT / 2;
+
 let nextTabId = 1;
 function makeTabId(): string {
   return `tab-${nextTabId++}`;
@@ -48,7 +51,7 @@ export function registerWindow(windowId: number, options?: { splitLayout?: boole
     ? {
         type: "split",
         direction: "row",
-        sizes: [50, 50],
+        sizes: [EQUAL_SPLIT_PERCENT, EQUAL_SPLIT_PERCENT],
         children: [
           makePane(windowDemoTabs[0].id, windowDemoTabs[1].id, windowDemoTabs[2].id),
           makePane(windowDemoTabs[3].id, windowDemoTabs[4].id, windowDemoTabs[5].id),
@@ -82,7 +85,15 @@ export function moveTabCrossWindow(
   tabId: string,
   fromWindowId: number,
   toWindowId: number,
-  options: { insertBeforeTabId?: string; targetPaneId?: string },
+  options: {
+    insertBeforeTabId?: string;
+    targetPaneId?: string;
+    splitTarget?: {
+      paneId: string;
+      direction: "row" | "column";
+      side: "before" | "after";
+    };
+  },
 ): { affectedWindows: number[] } {
   const fromState = appState.windows[fromWindowId];
   const toState = appState.windows[toWindowId];
@@ -98,9 +109,24 @@ export function moveTabCrossWindow(
   removeTabFromLayout(fromState.layout, tabId);
   delete fromState.tabs[tabId];
 
-  // Add tab to target window. Prefer the reported pane, but fall back to
-  // normal window-level insertion if that pane disappeared or was stale.
+  // Add tab to target window. Prefer a split target when the cursor is over
+  // a pane edge; otherwise insert into the reported pane. If the reported
+  // pane disappeared or was stale, fall back to normal window-level insertion.
   toState.tabs[tabId] = removedTab;
+  if (options.splitTarget !== undefined) {
+    const splitLayout = splitPaneWithTab(
+      toState.layout,
+      options.splitTarget.paneId,
+      tabId,
+      options.splitTarget.direction,
+      options.splitTarget.side,
+    );
+    if (splitLayout !== undefined) {
+      toState.layout = splitLayout;
+      return { affectedWindows: [fromWindowId, toWindowId] };
+    }
+  }
+
   const inserted = insertTabIntoLayout(toState.layout, tabId, options.insertBeforeTabId, options.targetPaneId);
   if (!inserted && options.targetPaneId !== undefined) {
     insertTabIntoLayout(toState.layout, tabId, options.insertBeforeTabId);
@@ -333,7 +359,7 @@ function removeTabFromLayout(node: LayoutNode, tabId: string): boolean {
         // Redistribute sizes evenly
         const n = node.sizes.length;
         if (n > 0) {
-          const each = 100 / n;
+          const each = FULL_PERCENT / n;
           node.sizes = Array(n).fill(each);
         }
       }
@@ -343,6 +369,65 @@ function removeTabFromLayout(node: LayoutNode, tabId: string): boolean {
   return false;
 }
 
+function splitPaneWithTab(
+  node: LayoutNode,
+  targetPaneId: string,
+  tabId: string,
+  direction: "row" | "column",
+  side: "before" | "after",
+): LayoutNode | undefined {
+  const newPane: PaneNode = {
+    type: "pane",
+    tabIds: [tabId],
+    pinnedTabIds: [],
+    activeTabId: tabId,
+  };
+
+  if (node.type === "pane") {
+    if (paneId(node) !== targetPaneId) return undefined;
+    return {
+      type: "split",
+      direction,
+      sizes: [EQUAL_SPLIT_PERCENT, EQUAL_SPLIT_PERCENT],
+      children: side === "before" ? [newPane, node] : [node, newPane],
+    };
+  }
+
+  for (let i = 0; i < node.children.length; i++) {
+    const child = node.children[i];
+    if (child === undefined) continue;
+
+    if (child.type === "pane" && paneId(child) === targetPaneId) {
+      if (node.direction === direction) {
+        const insertIndex = side === "before" ? i : i + 1;
+        node.children.splice(insertIndex, 0, newPane);
+        node.sizes.splice(insertIndex, 0, 0);
+        node.sizes = Array(node.children.length).fill(FULL_PERCENT / node.children.length);
+      } else {
+        node.children[i] = {
+          type: "split",
+          direction,
+          sizes: [EQUAL_SPLIT_PERCENT, EQUAL_SPLIT_PERCENT],
+          children: side === "before" ? [newPane, child] : [child, newPane],
+        };
+      }
+      return node;
+    }
+
+    const replacement = splitPaneWithTab(child, targetPaneId, tabId, direction, side);
+    if (replacement !== undefined) {
+      node.children[i] = replacement;
+      return node;
+    }
+  }
+
+  return undefined;
+}
+
+function paneId(pane: PaneNode): string {
+  return pane.tabIds[0] ?? "__empty__";
+}
+
 function insertTabIntoLayout(
   node: LayoutNode,
   tabId: string,
@@ -350,8 +435,7 @@ function insertTabIntoLayout(
   targetPaneId?: string,
 ): boolean {
   if (node.type === "pane") {
-    const paneId = node.tabIds[0] ?? "__empty__";
-    if (targetPaneId !== undefined && paneId !== targetPaneId) return false;
+    if (targetPaneId !== undefined && paneId(node) !== targetPaneId) return false;
     if (insertBeforeTabId !== undefined) {
       const idx = node.tabIds.indexOf(insertBeforeTabId);
       if (idx !== -1) {

@@ -2,6 +2,15 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import type { LayoutNode, PaneNode, SplitNode, Tab, WindowStateFromMain } from "./types.ts";
 
 const electron = window.electronAPI;
+const SPLIT_EDGE_RATIO = 0.25;
+
+type CrossWindowDropPreview = {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  kind: "insert" | "split";
+};
 
 // ─── Tree mutation helpers ────────────────────────────────
 
@@ -69,6 +78,7 @@ export function App(): React.ReactElement | null {
   const [error, setError] = useState<string | undefined>(undefined);
   const [contextMenu, setContextMenu] = useState<{ tabId: string; x: number; y: number } | undefined>(undefined);
   const [dropOverlay, setDropOverlay] = useState(false);
+  const [crossWindowDropPreview, setCrossWindowDropPreview] = useState<CrossWindowDropPreview | undefined>(undefined);
 
   useEffect(() => {
     if (electron === undefined) { setError("electronAPI not available"); return; }
@@ -81,18 +91,25 @@ export function App(): React.ReactElement | null {
     return electron.onStateUpdated(s => {
       setState(s);
       setDropOverlay(false);
+      setCrossWindowDropPreview(undefined);
     });
   }, []);
 
   useEffect(() => {
     const e = electron.onDragEnter(() => setDropOverlay(true));
-    const l = electron.onDragLeave(() => setDropOverlay(false));
+    const l = electron.onDragLeave(() => {
+      setDropOverlay(false);
+      setCrossWindowDropPreview(undefined);
+    });
     return () => { e(); l(); };
   }, []);
 
   useEffect(() => {
     if (!dropOverlay) return;
-    const clearOverlay = () => setDropOverlay(false);
+    const clearOverlay = () => {
+      setDropOverlay(false);
+      setCrossWindowDropPreview(undefined);
+    };
     window.addEventListener("mouseup", clearOverlay);
     window.addEventListener("drop", clearOverlay);
     window.addEventListener("dragend", clearOverlay);
@@ -109,16 +126,55 @@ export function App(): React.ReactElement | null {
   useEffect(() => {
     if (!dropOverlay) return;
     const handleMove = (ev: MouseEvent) => {
-      const panes = document.elementsFromPoint(ev.clientX, ev.clientY);
-      for (const el of panes) {
-        if (el instanceof HTMLElement && el.classList.contains("pane")) {
-          const paneId = el.dataset.paneId;
-          if (paneId !== undefined) {
-            electron.dragTargetPane(paneId);
+      const element = document.elementFromPoint(ev.clientX, ev.clientY);
+      if (!(element instanceof HTMLElement)) {
+        setCrossWindowDropPreview(undefined);
+        return;
+      }
+
+      const pane = element.closest(".pane");
+      if (!(pane instanceof HTMLElement)) {
+        setCrossWindowDropPreview(undefined);
+        return;
+      }
+
+      const paneId = pane.dataset.paneId;
+      if (paneId !== undefined) {
+        electron.dragTargetPane(paneId);
+      }
+
+      const content = element.closest(".pane-content");
+      if (content instanceof HTMLElement && pane.contains(content)) {
+        const rect = content.getBoundingClientRect();
+        const rx = (ev.clientX - rect.left) / rect.width;
+        const ry = (ev.clientY - rect.top) / rect.height;
+        const distances = [
+          { zone: "left" as const, distance: rx },
+          { zone: "right" as const, distance: 1 - rx },
+          { zone: "top" as const, distance: ry },
+          { zone: "bottom" as const, distance: 1 - ry },
+        ];
+        const closest = distances.reduce((a, b) => a.distance < b.distance ? a : b);
+        if (closest.distance < SPLIT_EDGE_RATIO) {
+          if (closest.zone === "left") {
+            setCrossWindowDropPreview({ left: rect.left, top: rect.top, width: rect.width * SPLIT_EDGE_RATIO, height: rect.height, kind: "split" });
             return;
           }
+          if (closest.zone === "right") {
+            setCrossWindowDropPreview({ left: rect.right - rect.width * SPLIT_EDGE_RATIO, top: rect.top, width: rect.width * SPLIT_EDGE_RATIO, height: rect.height, kind: "split" });
+            return;
+          }
+          if (closest.zone === "top") {
+            setCrossWindowDropPreview({ left: rect.left, top: rect.top, width: rect.width, height: rect.height * SPLIT_EDGE_RATIO, kind: "split" });
+            return;
+          }
+          setCrossWindowDropPreview({ left: rect.left, top: rect.bottom - rect.height * SPLIT_EDGE_RATIO, width: rect.width, height: rect.height * SPLIT_EDGE_RATIO, kind: "split" });
+          return;
         }
       }
+
+      const paneRect = pane.getBoundingClientRect();
+      setCrossWindowDropPreview({ left: paneRect.left, top: paneRect.top, width: paneRect.width, height: paneRect.height, kind: "insert" });
     };
     window.addEventListener("mousemove", handleMove);
     return () => window.removeEventListener("mousemove", handleMove);
@@ -296,7 +352,17 @@ export function App(): React.ReactElement | null {
         onContextMenu={(tabId, x, y) => setContextMenu({ tabId, x, y })}
         draggedTabId={draggedTabId}
       />
-      {dropOverlay && <div className="drop-overlay" />}
+      {dropOverlay && crossWindowDropPreview !== undefined && (
+        <div
+          className={`drop-overlay drop-overlay-${crossWindowDropPreview.kind}`}
+          style={{
+            left: crossWindowDropPreview.left,
+            top: crossWindowDropPreview.top,
+            width: crossWindowDropPreview.width,
+            height: crossWindowDropPreview.height,
+          }}
+        />
+      )}
       {contextMenu !== undefined && (
         <div className="context-menu" style={{ left: contextMenu.x, top: contextMenu.y }} onClick={e => e.stopPropagation()}>
           <button className="context-item" onClick={() => { electron.toggleTabPin(contextMenu.tabId); setContextMenu(undefined); }}>
@@ -441,8 +507,6 @@ function Pane(props: {
   const [splitZone, setSplitZone] = useState<"left" | "right" | "top" | "bottom" | null>(null);
 
 
-  const EDGE = 0.25; // 25% edge zone for split detection
-
   const computeSplitZone = (el: HTMLElement, clientX: number, clientY: number): "left" | "right" | "top" | "bottom" | null => {
     const rect = el.getBoundingClientRect();
     const rx = (clientX - rect.left) / rect.width;
@@ -455,7 +519,7 @@ function Pane(props: {
       { zone: "bottom" as const, d: 1 - ry },
     ];
     const closest = dists.reduce((a, b) => a.d < b.d ? a : b);
-    return closest.d < EDGE ? closest.zone : null;
+    return closest.d < SPLIT_EDGE_RATIO ? closest.zone : null;
   };
 
   const computeInsertIndex = (barEl: HTMLElement, clientX: number): number => {

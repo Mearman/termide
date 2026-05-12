@@ -218,9 +218,13 @@ html, body, #root {
 /* ─── Cross-window drop overlay ────────────────────────── */
 
 .drop-overlay {
-  position: absolute; inset: 0;
+  position: fixed;
   background: var(--drop-target);
   border: 2px dashed var(--accent);
-  border-radius: 4px; z-index: 100;
+  border-radius: 4px;
+  z-index: 100;
   pointer-events: none;
+}
+.drop-overlay-split {
+  box-shadow: 0 0 12px rgba(137, 180, 250, 0.4);
 }
