@@ -102,10 +102,17 @@ test.describe("Intra-window tab drag between panes", () => {
     const leftContainer = containers.first();
     const rightContainer = containers.last();
 
-    // Drag all 3 tabs from left pane to right pane
+    // Drag all 3 tabs from left pane to right pane.
+    // Each drag re-queries locators because the mosaic tree reshapes
+    // after each drop (containers may merge).
     for (let i = 0; i < 3; i++) {
-      const tab = leftContainer.locator(TAB_BUTTON).first();
-      const targetTabBar = rightContainer.locator(".mosaic-tab-bar.draggable");
+      // Re-query: after drops, the container list may have changed
+      const currentContainers = page.locator(TABS_CONTAINER);
+      const count = await currentContainers.count();
+      if (count < 2) break; // already merged
+
+      const tab = currentContainers.first().locator(TAB_BUTTON).first();
+      const targetTabBar = currentContainers.last().locator(".mosaic-tab-bar.draggable");
       await tab.dragTo(targetTabBar, { force: true });
       await page.waitForTimeout(500);
     }
