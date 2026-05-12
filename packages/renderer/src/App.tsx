@@ -1,19 +1,14 @@
-import React, { useState, useEffect, useCallback } from "react";
-import { Mosaic, type MosaicNode } from "react-mosaic-component";
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import {
+  Mosaic,
+  type MosaicNode,
+} from "react-mosaic-component";
 import type { WindowStateFromMain, LayoutNode, Tab } from "./types.ts";
 
 const electron = window.electronAPI;
 
 // ─── Layout tree ↔ MosaicNode conversion ──────────────────
 
-/**
- * Convert our internal LayoutNode tree to react-mosaic v7's MosaicNode.
- *
- * Mapping:
- * - PaneNode → always MosaicTabsNode (even with 1 tab, so every pane
- *   gets a tab bar with close/drag/+ capabilities)
- * - SplitNode → MosaicSplitNode (sizes → splitPercentages)
- */
 function toMosaicNode(layout: LayoutNode): MosaicNode<string> {
   if (layout.type === "pane") {
     const nonPinned = layout.tabIds.filter((id) => !layout.pinnedTabIds.includes(id));
@@ -35,15 +30,10 @@ function toMosaicNode(layout: LayoutNode): MosaicNode<string> {
   };
 }
 
-/**
- * Convert a react-mosaic MosaicNode back to our internal LayoutNode.
- * Reconstructs pinnedTabIds by looking up tab.pinned from the tabs dictionary.
- */
 function fromMosaicNode(
   mosaic: MosaicNode<string>,
   tabs: Record<string, Tab>,
 ): LayoutNode {
-  // Leaf node (single tab ID string)
   if (typeof mosaic === "string") {
     const tab = tabs[mosaic];
     return {
@@ -66,7 +56,6 @@ function fromMosaicNode(
     };
   }
 
-  // MosaicSplitNode
   return {
     type: "split",
     direction: mosaic.direction,
@@ -75,9 +64,6 @@ function fromMosaicNode(
   };
 }
 
-/**
- * Find all tab IDs referenced anywhere in a MosaicNode tree.
- */
 function collectTabIds(mosaic: MosaicNode<string>): string[] {
   if (typeof mosaic === "string") return mosaic !== "" ? [mosaic] : [];
   if (mosaic.type === "tabs") return [...mosaic.tabs];
@@ -90,6 +76,9 @@ export function App(): React.ReactElement | null {
   const [windowId, setWindowId] = useState<number>(-1);
   const [state, setState] = useState<WindowStateFromMain | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
+  const [contextMenu, setContextMenu] = useState<
+    { tabId: string; x: number; y: number } | undefined
+  >(undefined);
 
   useEffect(() => {
     if (electron === undefined) {
@@ -104,13 +93,14 @@ export function App(): React.ReactElement | null {
     }
   }, []);
 
-  // Listen for state pushes from main process
   useEffect(() => {
     const unsub = electron.onStateUpdated((newState) => {
       setState(newState);
     });
     return unsub;
   }, []);
+
+  const mosaicRootRef = useRef<HTMLDivElement>(null);
 
   // ─── Mosaic onChange: sync layout back to main process ──
 
@@ -120,7 +110,6 @@ export function App(): React.ReactElement | null {
 
       const newLayout = fromMosaicNode(newMosaic, state.tabs);
 
-      // Collect all tab IDs in the new layout and remove orphaned tabs
       const referencedIds = new Set(collectTabIds(newMosaic));
       const newTabs: Record<string, Tab> = {};
       for (const [id, tab] of Object.entries(state.tabs)) {
@@ -136,25 +125,17 @@ export function App(): React.ReactElement | null {
   );
 
   // ─── Cross-window drag hooks ────────────────────────────
-  // Mosaic's react-dnd fires real DOM dragstart/dragend events.
-  // We listen on the root container via event delegation to detect
-  // when a tab drag begins (to notify the main process) and ends
-  // (to trigger cross-window handoff if the drop was outside).
-
-  const mosaicRootRef = React.useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const el = mosaicRootRef.current;
     if (el === null) return;
 
     const handleDragStart = (e: DragEvent) => {
-      // Find the closest draggable tab button
       const target = (e.target as HTMLElement).closest('.mosaic-tab-button[draggable="true"]');
       if (target === null) return;
       const tabId = target.getAttribute("title");
       if (tabId === null) return;
 
-      // Look up tab data from current state
       const tab = state?.tabs[tabId];
       if (tab === undefined) return;
 
@@ -168,7 +149,6 @@ export function App(): React.ReactElement | null {
     };
 
     const handleDragEnd = (e: DragEvent) => {
-      // dropEffect "none" means the drag left the window (cross-window)
       const completed = e.dataTransfer?.dropEffect === "none";
       electron.tabDragEnd(completed);
     };
@@ -180,6 +160,69 @@ export function App(): React.ReactElement | null {
       el.removeEventListener("dragend", handleDragEnd);
     };
   }, [state, windowId]);
+
+  // ─── Middle-click to close tabs ─────────────────────────
+
+  useEffect(() => {
+    const el = mosaicRootRef.current;
+    if (el === null) return;
+
+    const handleAuxClick = (e: MouseEvent) => {
+      if (e.button !== 1) return; // middle-click only
+      const target = (e.target as HTMLElement).closest('.mosaic-tab-button[draggable="true"]');
+      if (target === null) return;
+      const tabId = target.getAttribute("title");
+      if (tabId === null) return;
+      e.preventDefault();
+      handleCloseTab(tabId);
+    };
+
+    el.addEventListener("auxclick", handleAuxClick);
+    return () => el.removeEventListener("auxclick", handleAuxClick);
+  }, [state]);
+
+  // ─── Right-click context menu ───────────────────────────
+
+  useEffect(() => {
+    const el = mosaicRootRef.current;
+    if (el === null) return;
+
+    const handleContextMenu = (e: MouseEvent) => {
+      const target = (e.target as HTMLElement).closest('.mosaic-tab-button[draggable="true"]');
+      if (target === null) return;
+      const tabId = target.getAttribute("title");
+      if (tabId === null) return;
+      e.preventDefault();
+      setContextMenu({ tabId, x: e.clientX, y: e.clientY });
+    };
+
+    // Click outside to close context menu
+    const handleClick = () => setContextMenu(undefined);
+
+    el.addEventListener("contextmenu", handleContextMenu);
+    el.addEventListener("click", handleClick);
+    return () => {
+      el.removeEventListener("contextmenu", handleContextMenu);
+      el.removeEventListener("click", handleClick);
+    };
+  }, []);
+
+  // ─── Close tab handler ─────────────────────────────────
+
+  const handleCloseTab = useCallback(
+    (tabId: string) => {
+      if (state === undefined) return;
+      const mosaic = toMosaicNode(state.layout);
+      const newMosaic = removeTabFromMosaic(mosaic, tabId);
+      if (newMosaic === undefined) return;
+      const newLayout = fromMosaicNode(newMosaic, state.tabs);
+      const newTabs = { ...state.tabs };
+      delete newTabs[tabId];
+      setState({ ...state, layout: newLayout, tabs: newTabs });
+      electron.tabMovedIntra({ windowId, layout: newLayout });
+    },
+    [state, windowId],
+  );
 
   if (error !== undefined) {
     return <div style={{ padding: 20, color: "#c75d5d" }}>Error: {error}</div>;
@@ -197,10 +240,7 @@ export function App(): React.ReactElement | null {
         value={mosaicNode}
         onChange={handleMosaicChange}
         renderTile={(tabId: string) => (
-          <TileContent
-            tabId={tabId}
-            tabs={state.tabs}
-          />
+          <TileContent tabId={tabId} tabs={state.tabs} />
         )}
         renderTabTitle={(props: { tabKey: string }) => {
           const tab = state.tabs[props.tabKey];
@@ -216,31 +256,57 @@ export function App(): React.ReactElement | null {
             <span>{props.tabKey}</span>
           );
         }}
+        canClose={() => "canClose"}
         className="mosaic-blueprint-theme"
         resize={{ minimumPaneSizePercentage: 5 }}
       />
+
+      {/* Context menu overlay */}
+      {contextMenu !== undefined && (
+        <div
+          className="tab-context-menu"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            className="tab-context-item"
+            onClick={() => {
+              electron.toggleTabPin(contextMenu.tabId);
+              setContextMenu(undefined);
+            }}
+          >
+            {state.tabs[contextMenu.tabId]?.pinned ? "Unpin" : "Pin"}
+          </button>
+          <button
+            className="tab-context-item"
+            onClick={() => {
+              handleCloseTab(contextMenu.tabId);
+              setContextMenu(undefined);
+            }}
+          >
+            Close
+          </button>
+        </div>
+      )}
     </div>
   );
 }
 
 // ─── Tile content renderer ────────────────────────────────
 
-interface TileContentProps {
-  tabId: string;
-  tabs: Record<string, Tab>;
-}
-
 function TileContent({
   tabId,
   tabs,
-}: TileContentProps): React.ReactElement {
+}: {
+  tabId: string;
+  tabs: Record<string, Tab>;
+}): React.ReactElement {
   const tab = tabs[tabId];
   const title = tab?.title ?? tabId;
   const colour = tab?.colour ?? "#888";
 
   return (
     <div className="mosaic-tile-content">
-      {/* Content area — tab bar is handled by mosaic */}
       <div className="tile-body">
         <div className="content-header">
           <span className="content-colour-dot" style={{ backgroundColor: colour }} />
@@ -262,10 +328,6 @@ function TileContent({
 
 // ─── Mosaic tree mutation helpers ─────────────────────────
 
-/**
- * Remove a tab from anywhere in the mosaic tree.
- * Returns undefined if the tab wasn't found.
- */
 function removeTabFromMosaic(
   node: MosaicNode<string>,
   tabId: string,
@@ -286,7 +348,6 @@ function removeTabFromMosaic(
     return { ...node, tabs: newTabs, activeTabIndex: newActive };
   }
 
-  // Split node
   const newChildren = node.children
     .map((child) => removeTabFromMosaic(child, tabId))
     .filter((c): c is MosaicNode<string> => c !== undefined);
