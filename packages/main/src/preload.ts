@@ -43,6 +43,16 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.send("tab-drag-end", completed);
   },
 
+  /** Report that a drag is over this window (for broadcast-based cross-window detection). */
+  dragTargetEnter: (windowId) => {
+    ipcRenderer.send("drag-target-enter", windowId);
+  },
+
+  /** Report that a drag left this window. */
+  dragTargetLeave: (windowId) => {
+    ipcRenderer.send("drag-target-leave", windowId);
+  },
+
   // ─── Test-only APIs ────────────────────────────────────
 
   /** Create a second test window. Returns the new window ID. */

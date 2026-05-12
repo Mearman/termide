@@ -6,7 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createMainWindow, createWindowWithTab } from "./window-manager.ts";
 import { appState, updateWindowLayout, moveTabCrossWindow, registerWindow } from "./state.ts";
-import { startDrag, endDrag, setDragTargetForTest, getDragTargetForTest } from "./drag-coordinator.ts";
+import { startDrag, endDrag, setDragTargetForTest, getDragTargetForTest, reportDragTargetEnter, reportDragTargetLeave } from "./drag-coordinator.ts";
 import type { TabMovedIntraPayload, DragTabStartPayload } from "./types.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -38,6 +38,14 @@ ipcMain.on("tab-drag-begin", (_event, payload: DragTabStartPayload): void => {
 
 ipcMain.on("tab-drag-end", (_event, completed: boolean): void => {
   endDrag(completed);
+});
+
+ipcMain.on("drag-target-enter", (_event, windowId: number): void => {
+  reportDragTargetEnter(windowId);
+});
+
+ipcMain.on("drag-target-leave", (_event, windowId: number): void => {
+  reportDragTargetLeave(windowId);
 });
 
 // ─── Drag completion (cross-window) ───────────────────────

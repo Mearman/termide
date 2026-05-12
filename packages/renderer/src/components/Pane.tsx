@@ -69,6 +69,32 @@ export function Pane({
     };
   }, []);
 
+  // Broadcast drag target state to main process for cross-window coordination.
+  // When a tab drag is active and the cursor enters this pane, report it
+  // as a potential drop target. When it leaves, clear it.
+  const handlePaneDragEnter = useCallback(
+    (e: React.DragEvent) => {
+      if (e.dataTransfer.types.includes("application/tab-drag")) {
+        setIsLocalDragOver(true);
+        // Report to main process that this window is a potential drop target
+        window.electronAPI.dragTargetEnter(windowId);
+      }
+    },
+    [windowId],
+  );
+
+  const handlePaneDragLeave = useCallback(
+    (e: React.DragEvent) => {
+      const related = e.relatedTarget as HTMLElement | null;
+      if (related !== null && e.currentTarget.contains(related)) return;
+      setIsLocalDragOver(false);
+      setInsertIndicator(undefined);
+      setDropZone(undefined);
+      window.electronAPI.dragTargetLeave(windowId);
+    },
+    [windowId],
+  );
+
   // Clean up auto-activate timer on unmount
   useEffect(() => {
     return () => {
@@ -116,20 +142,6 @@ export function Pane({
     },
     [],
   );
-
-  const handleDragEnter = useCallback((e: React.DragEvent) => {
-    if (e.dataTransfer.types.includes("application/tab-drag")) {
-      setIsLocalDragOver(true);
-    }
-  }, []);
-
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    const related = e.relatedTarget as HTMLElement | null;
-    if (related !== null && e.currentTarget.contains(related)) return;
-    setIsLocalDragOver(false);
-    setInsertIndicator(undefined);
-    setDropZone(undefined);
-  }, []);
 
   // ─── Tab bar drop: insertion indicators + reorder/move ──
 
@@ -301,8 +313,8 @@ export function Pane({
       data-testid="pane"
       data-pane-path={path}
       className={`pane${isExternalDragOver ? " drag-over" : ""}`}
-      onDragEnter={handleDragEnter}
-      onDragLeave={handleDragLeave}
+      onDragEnter={handlePaneDragEnter}
+      onDragLeave={handlePaneDragLeave}
     >
       {/* Tab bar */}
       <div
