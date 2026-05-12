@@ -79,6 +79,26 @@ export function App(): React.ReactElement | null {
     [state, pushLayout],
   );
 
+  const handleCopyTabToPane = useCallback(
+    (tabId: string, toPath: string, insertBeforeTabId?: string) => {
+      if (state === undefined) return;
+      const sourceTab = state.tabs[tabId];
+      if (sourceTab === undefined) return;
+
+      // Create a duplicate tab with a new ID
+      const newId = `tab-copy-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const newTab: Tab = { ...sourceTab, id: newId };
+
+      const newTabs = { ...state.tabs, [newId]: newTab };
+      const newLayout = insertTabIntoPane(state.layout, toPath, newId, insertBeforeTabId);
+      if (newLayout !== undefined) {
+        setState({ ...state, layout: newLayout, tabs: newTabs });
+        electron.tabMovedIntra({ windowId, layout: newLayout });
+      }
+    },
+    [state, windowId],
+  );
+
   const handleSplitPane = useCallback(
     (tabId: string, sourcePath: string, targetPath: string, direction: "row" | "column") => {
       if (state === undefined) return;
@@ -166,6 +186,7 @@ export function App(): React.ReactElement | null {
         onSetActiveTab={handleSetActiveTab}
         onReorderTabs={handleReorderTabs}
         onMoveTabBetweenPanes={handleMoveTabBetweenPanes}
+        onCopyTabToPane={handleCopyTabToPane}
         onSplitPane={handleSplitPane}
         onCloseTab={handleCloseTab}
         onTogglePin={handleTogglePin}
@@ -184,7 +205,8 @@ interface LayoutRendererProps {
   onSetActiveTab: (panePath: string, tabId: string) => void;
   onReorderTabs: (panePath: string, tabId: string, fromIndex: number, toIndex: number) => void;
   onMoveTabBetweenPanes: (tabId: string, fromPath: string, toPath: string, insertBeforeTabId?: string) => void;
-  onSplitPane: (tabId: string, sourcePath: string, direction: "row" | "column") => void;
+  onCopyTabToPane: (tabId: string, toPath: string, insertBeforeTabId?: string) => void;
+  onSplitPane: (tabId: string, sourcePath: string, targetPath: string, direction: "row" | "column") => void;
   onCloseTab: (tabId: string) => void;
   onTogglePin: (tabId: string) => void;
   onResize?: (splitPath: string, index: number, deltaPx: number) => void;
@@ -201,6 +223,7 @@ function LayoutRenderer({
   onSplitPane,
   onCloseTab,
   onTogglePin,
+  onCopyTabToPane,
   onResize,
   path = "root",
 }: LayoutRendererProps): React.ReactElement {
@@ -214,7 +237,8 @@ function LayoutRenderer({
         onSetActiveTab={(tabId) => onSetActiveTab(path, tabId)}
         onReorderTabs={(tabId, from, to) => onReorderTabs(path, tabId, from, to)}
         onMoveTabBetweenPanes={onMoveTabBetweenPanes}
-        onSplitPane={(tabId, source, direction) => onSplitPane(tabId, source, path, direction)}
+        onCopyTabToPane={onCopyTabToPane}
+        onSplitPane={(tabId, source, dir) => onSplitPane(tabId, source, path, dir)}
         onCloseTab={onCloseTab}
         onTogglePin={onTogglePin}
       />
@@ -250,6 +274,7 @@ function LayoutRenderer({
               onSetActiveTab={onSetActiveTab}
               onReorderTabs={onReorderTabs}
               onMoveTabBetweenPanes={onMoveTabBetweenPanes}
+              onCopyTabToPane={onCopyTabToPane}
               onSplitPane={onSplitPane}
               onCloseTab={onCloseTab}
               onTogglePin={onTogglePin}
@@ -531,6 +556,34 @@ function closeTabInTree(root: LayoutNode, tabId: string): LayoutNode | undefined
   }
 
   return cleanupEmptyPanes(cloned);
+}
+
+/**
+ * Insert a tab ID into a pane at the given path, optionally before another tab.
+ * Unlike moveTabBetweenPanes, this does NOT remove from source.
+ */
+function insertTabIntoPane(
+  root: LayoutNode,
+  panePath: string,
+  tabId: string,
+  insertBeforeTabId?: string,
+): LayoutNode | undefined {
+  const cloned = structuredClone(root);
+  const targetPane = findPaneAtPath(cloned, panePath);
+  if (targetPane === undefined) return undefined;
+
+  if (insertBeforeTabId !== undefined) {
+    const beforeIdx = targetPane.tabIds.indexOf(insertBeforeTabId);
+    if (beforeIdx !== -1) {
+      targetPane.tabIds.splice(beforeIdx, 0, tabId);
+    } else {
+      targetPane.tabIds.push(tabId);
+    }
+  } else {
+    targetPane.tabIds.push(tabId);
+  }
+  targetPane.activeTabId = tabId;
+  return cloned;
 }
 
 /**

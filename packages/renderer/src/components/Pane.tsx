@@ -27,6 +27,7 @@ interface PaneProps {
   onSetActiveTab: (tabId: string) => void;
   onReorderTabs: (tabId: string, fromIndex: number, toIndex: number) => void;
   onMoveTabBetweenPanes: (tabId: string, fromPath: string, toPath: string, insertBeforeTabId?: string) => void;
+  onCopyTabToPane: (tabId: string, toPath: string, insertBeforeTabId?: string) => void;
   onSplitPane: (tabId: string, sourcePanePath: string, direction: "row" | "column") => void;
   onCloseTab: (tabId: string) => void;
   onTogglePin: (tabId: string) => void;
@@ -40,6 +41,7 @@ export function Pane({
   onSetActiveTab,
   onReorderTabs,
   onMoveTabBetweenPanes,
+  onCopyTabToPane,
   onSplitPane,
   onCloseTab,
   onTogglePin,
@@ -184,9 +186,10 @@ export function Pane({
       if (raw === "") return;
 
       const dragData: TabDragData = JSON.parse(raw);
+      const isCopy = e.dataTransfer.dropEffect === "copy";
 
       if (dragData.sourcePanePath === path) {
-        // Same pane — reorder
+        // Same pane — reorder (copy is meaningless within same pane)
         const targetTab = (e.target as HTMLElement).closest("[data-tab-id]");
         const targetTabId: string | undefined =
           targetTab !== null ? (targetTab as HTMLElement).dataset.tabId : undefined;
@@ -198,20 +201,24 @@ export function Pane({
           }
         }
       } else {
-        // Different pane — move
+        // Different pane — move or copy
         const targetTab = (e.target as HTMLElement).closest("[data-tab-id]");
         const insertBeforeTabId: string | undefined =
           targetTab !== null ? (targetTab as HTMLElement).dataset.tabId : undefined;
 
-        onMoveTabBetweenPanes(
-          dragData.tabId,
-          dragData.sourcePanePath,
-          path,
-          insertBeforeTabId,
-        );
+        if (isCopy) {
+          onCopyTabToPane(dragData.tabId, path, insertBeforeTabId);
+        } else {
+          onMoveTabBetweenPanes(
+            dragData.tabId,
+            dragData.sourcePanePath,
+            path,
+            insertBeforeTabId,
+          );
+        }
       }
     },
-    [path, pane.tabIds, onReorderTabs, onMoveTabBetweenPanes],
+    [path, pane.tabIds, onReorderTabs, onMoveTabBetweenPanes, onCopyTabToPane],
   );
 
   // ─── Content area drop overlay ─────────────────────────
