@@ -79,6 +79,7 @@ export function App(): React.ReactElement | null {
   const [contextMenu, setContextMenu] = useState<
     { tabId: string; x: number; y: number } | undefined
   >(undefined);
+  const [dropOverlayVisible, setDropOverlayVisible] = useState(false);
 
   useEffect(() => {
     if (electron === undefined) {
@@ -98,6 +99,17 @@ export function App(): React.ReactElement | null {
       setState(newState);
     });
     return unsub;
+  }, []);
+
+  // ─── Cross-window drop indicator ──────────────────────
+
+  useEffect(() => {
+    const unsubEnter = electron.onDragEnter(() => setDropOverlayVisible(true));
+    const unsubLeave = electron.onDragLeave(() => setDropOverlayVisible(false));
+    return () => {
+      unsubEnter();
+      unsubLeave();
+    };
   }, []);
 
   const mosaicRootRef = useRef<HTMLDivElement>(null);
@@ -287,6 +299,11 @@ export function App(): React.ReactElement | null {
             Close
           </button>
         </div>
+      )}
+
+      {/* Cross-window drop overlay */}
+      {dropOverlayVisible && (
+        <div className="drop-overlay" />
       )}
     </div>
   );
