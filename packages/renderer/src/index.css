@@ -138,6 +138,23 @@ html, body, #root {
   background: rgba(137, 180, 250, 0.08);
 }
 
+/* Split zone overlay on content area */
+.pane-content {
+  position: relative;
+}
+
+.split-zone-overlay {
+  position: absolute;
+  z-index: 10;
+  pointer-events: none;
+  background: rgba(137, 180, 250, 0.2);
+  border: 2px dashed rgba(137, 180, 250, 0.5);
+}
+.split-zone-left   { top: 0; left: 0; bottom: 0; width: 25%; }
+.split-zone-right  { top: 0; right: 0; bottom: 0; width: 25%; }
+.split-zone-top    { top: 0; left: 0; right: 0; height: 25%; }
+.split-zone-bottom { bottom: 0; left: 0; right: 0; height: 25%; }
+
 .tab-insert-indicator {
   width: 2px;
   align-self: stretch;

@@ -389,6 +389,25 @@ function Pane(props: {
   const insertRef = useRef(-1);
   const [dragOver, setDragOver] = useState(false);
   const [insertIdx, setInsertIdx] = useState(-1);
+  const [splitZone, setSplitZone] = useState<"left" | "right" | "top" | "bottom" | null>(null);
+
+
+  const EDGE = 0.25; // 25% edge zone for split detection
+
+  const computeSplitZone = (el: HTMLElement, clientX: number, clientY: number): "left" | "right" | "top" | "bottom" | null => {
+    const rect = el.getBoundingClientRect();
+    const rx = (clientX - rect.left) / rect.width;
+    const ry = (clientY - rect.top) / rect.height;
+    // Pick whichever edge is closest
+    const dists = [
+      { zone: "left" as const, d: rx },
+      { zone: "right" as const, d: 1 - rx },
+      { zone: "top" as const, d: ry },
+      { zone: "bottom" as const, d: 1 - ry },
+    ];
+    const closest = dists.reduce((a, b) => a.d < b.d ? a : b);
+    return closest.d < EDGE ? closest.zone : null;
+  };
 
   const computeInsertIndex = (barEl: HTMLElement, clientX: number): number => {
     const buttons = barEl.querySelectorAll(".tab-button");
@@ -413,6 +432,7 @@ function Pane(props: {
           insertRef.current = idx;
           setDragOver(true);
           setInsertIdx(idx);
+          setSplitZone(null);
         }}
         onDragLeave={e => {
           if (!e.currentTarget.contains(e.relatedTarget as Node)) {
@@ -466,37 +486,36 @@ function Pane(props: {
           if (!e.dataTransfer.types.includes("application/tab-id")) return;
           e.preventDefault();
           e.dataTransfer.dropEffect = "move";
+          setDragOver(false);
+          setInsertIdx(-1);
+          setSplitZone(computeSplitZone(e.currentTarget, e.clientX, e.clientY));
+        }}
+        onDragLeave={e => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+            setSplitZone(null);
+          }
         }}
         onDrop={e => {
           const tabId = e.dataTransfer.getData("application/tab-id");
           if (tabId === "") return;
           e.preventDefault();
-
-          // Determine split direction and side from drop position
-          const rect = e.currentTarget.getBoundingClientRect();
-          const x = e.clientX - rect.left;
-          const y = e.clientY - rect.top;
-          const w = rect.width;
-          const h = rect.height;
-          const threshold = 0.3; // 30% edge zone
-
-          const relX = x / w;
-          const relY = y / h;
-
-          // Determine which edge zone the drop is in
-          const isLeft = relX < threshold;
-          const isRight = relX > 1 - threshold;
-          const isTop = relY < threshold;
-          const isBottom = relY > 1 - threshold;
-
-          if (isLeft || isRight) {
-            props.onSplitPane(pid, tabId, "row", isLeft ? "before" : "after");
-          } else if (isTop || isBottom) {
-            props.onSplitPane(pid, tabId, "column", isTop ? "before" : "after");
-          }
-          // Centre zone: do nothing (tab stays where it is)
+          e.stopPropagation();
+          const zone = computeSplitZone(e.currentTarget, e.clientX, e.clientY);
+          setSplitZone(null);
+          if (zone === null) return; // centre — no-op
+          const dirMap: Record<string, ["row" | "column", "before" | "after"]> = {
+            left: ["row", "before"],
+            right: ["row", "after"],
+            top: ["column", "before"],
+            bottom: ["column", "after"],
+          };
+          const [direction, side] = dirMap[zone]!;
+          props.onSplitPane(pid, tabId, direction, side);
         }}
       >
+        {splitZone !== null && (
+          <div className={`split-zone-overlay split-zone-${splitZone}`} />
+        )}
         <ContentArea tab={tabs[pane.activeTabId]} tabId={pane.activeTabId} />
       </div>
     </div>
