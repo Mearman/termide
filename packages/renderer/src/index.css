@@ -132,6 +132,21 @@ html, body, #root {
 }
 .tab-add:hover { color: var(--text-primary); background: var(--bg-tab); }
 
+/* Drag feedback */
+
+.tab-bar.drag-over {
+  background: rgba(137, 180, 250, 0.08);
+}
+
+.tab-insert-indicator {
+  width: 2px;
+  align-self: stretch;
+  background: var(--accent);
+  flex-shrink: 0;
+  border-radius: 1px;
+  box-shadow: 0 0 4px var(--accent);
+}
+
 /* ─── Pane content ─────────────────────────────────────── */
 
 .pane-content {

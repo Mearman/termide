@@ -320,6 +320,8 @@ function Pane(props: {
   const { pane, tabs } = props;
   const pid = paneIdentity(pane);
   const insertRef = useRef(-1);
+  const [dragOver, setDragOver] = useState(false);
+  const [insertIdx, setInsertIdx] = useState(-1);
 
   const computeInsertIndex = (barEl: HTMLElement, clientX: number): number => {
     const buttons = barEl.querySelectorAll(".tab-button");
@@ -335,21 +337,25 @@ function Pane(props: {
   return (
     <div className="pane">
       <div
-        className="tab-bar"
+        className={`tab-bar${dragOver ? " drag-over" : ""}`}
         onDragOver={e => {
           if (!e.dataTransfer.types.includes("application/tab-id")) return;
           e.preventDefault();
           e.dataTransfer.dropEffect = "move";
-          insertRef.current = computeInsertIndex(e.currentTarget, e.clientX);
-          e.currentTarget.dataset.insert = String(insertRef.current);
+          const idx = computeInsertIndex(e.currentTarget, e.clientX);
+          insertRef.current = idx;
+          setDragOver(true);
+          setInsertIdx(idx);
         }}
         onDragLeave={e => {
           if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-            delete e.currentTarget.dataset.insert;
+            setDragOver(false);
+            setInsertIdx(-1);
           }
         }}
         onDrop={e => {
-          delete e.currentTarget.dataset.insert;
+          setDragOver(false);
+          setInsertIdx(-1);
           const tabId = e.dataTransfer.getData("application/tab-id");
           if (tabId === "") return;
           e.preventDefault();
@@ -357,31 +363,34 @@ function Pane(props: {
           insertRef.current = -1;
         }}
       >
-        {pane.tabIds.map(tabId => {
+        {pane.tabIds.map((tabId, i) => {
           const tab = tabs[tabId];
           const active = tabId === pane.activeTabId;
           return (
-            <button
-              key={tabId}
-              className={`tab-button${active ? " active" : ""}${tab?.pinned ? " pinned" : ""}`}
-              draggable
-              onClick={() => props.onTabClick(pid, tabId)}
-              onDragStart={e => props.onTabDragStart(e, tabId)}
-              onDragEnd={e => props.onTabDragEnd(e)}
-              onContextMenu={e => { e.preventDefault(); props.onContextMenu(tabId, e.clientX, e.clientY); }}
-              onAuxClick={e => { if (e.button === 1) { e.preventDefault(); props.onCloseTab(tabId); } }}
-            >
-              <span className="tab-dot" style={{ background: tab?.colour ?? "#888" }} />
-              <span className="tab-title">{tab?.title ?? tabId}</span>
-              {tab?.pinned && <span className="tab-badge">📌</span>}
-              {tab?.preview && <span className="tab-badge preview">preview</span>}
-              {tab?.dirty && <span className="tab-badge dirty">●</span>}
-              <span className="tab-close" onClick={e => { e.stopPropagation(); props.onCloseTab(tabId); }}>
-                {tab?.dirty ? "●" : "×"}
-              </span>
-            </button>
+            <React.Fragment key={tabId}>
+              {dragOver && insertIdx === i && <div className="tab-insert-indicator" />}
+              <button
+                className={`tab-button${active ? " active" : ""}${tab?.pinned ? " pinned" : ""}`}
+                draggable
+                onClick={() => props.onTabClick(pid, tabId)}
+                onDragStart={e => props.onTabDragStart(e, tabId)}
+                onDragEnd={e => props.onTabDragEnd(e)}
+                onContextMenu={e => { e.preventDefault(); props.onContextMenu(tabId, e.clientX, e.clientY); }}
+                onAuxClick={e => { if (e.button === 1) { e.preventDefault(); props.onCloseTab(tabId); } }}
+              >
+                <span className="tab-dot" style={{ background: tab?.colour ?? "#888" }} />
+                <span className="tab-title">{tab?.title ?? tabId}</span>
+                {tab?.pinned && <span className="tab-badge">📌</span>}
+                {tab?.preview && <span className="tab-badge preview">preview</span>}
+                {tab?.dirty && <span className="tab-badge dirty">●</span>}
+                <span className="tab-close" onClick={e => { e.stopPropagation(); props.onCloseTab(tabId); }}>
+                  {tab?.dirty ? "●" : "×"}
+                </span>
+              </button>
+            </React.Fragment>
           );
         })}
+        {dragOver && insertIdx >= pane.tabIds.length && <div className="tab-insert-indicator" />}
         <button className="tab-add" onClick={() => props.onOpenTab(NEW_TITLES[Math.floor(Math.random() * NEW_TITLES.length)])}>+</button>
       </div>
       <div className="pane-content">
