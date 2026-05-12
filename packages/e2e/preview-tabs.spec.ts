@@ -46,6 +46,7 @@ test.describe("Tab opening and preview model", () => {
     });
 
     // Open another tab (should replace the preview)
+    await page.waitForTimeout(200); // Wait for first preview tab state to settle
     await firstPane.locator(".tab-new-button").click();
     // Count stays at initialCount + 1 (preview replaced, not stacked)
     await expect(firstPane.locator("[data-testid='tab']")).toHaveCount(initialCount + 1, {
