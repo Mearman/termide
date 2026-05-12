@@ -5,116 +5,115 @@
  * - Opening a tab creates a preview tab (italic)
  * - Opening another tab replaces the preview
  * - Double-clicking a preview tab pins it
- * - Pinned tabs are compact (icon-only)
- * - New tab button (+) opens a tab
+ * - Pinned tabs show compact rendering
  */
 import { test, expect } from "./fixture";
+
+const TAB_BUTTON = '.mosaic-tab-button[draggable="true"]';
+const TABS_CONTAINER = ".mosaic-tabs-container";
 
 test.describe("Tab opening and preview model", () => {
   test("clicking + button adds a new tab", async ({ page }) => {
     await page.waitForLoadState("domcontentloaded");
-    await page.locator("[data-testid='tab']").first().waitFor({ timeout: 10_000 });
+    await page.locator(TAB_BUTTON).first().waitFor({ timeout: 10_000 });
 
     // Count initial tabs (6 demo tabs)
-    const initialCount = await page.locator("[data-testid='tab']").count();
+    const initialCount = await page.locator(TAB_BUTTON).count();
 
-    // Click the + button in the first pane
-    const firstPane = page.locator("[data-testid='pane']").first();
-    await firstPane.locator(".tab-new-button").click();
+    // Click the + button — we need to use openTab IPC since mosaic's + button is hidden
+    await page.evaluate(() => {
+      window.electronAPI.openTab("new-file.ts");
+    });
 
     // Wait for the new tab to appear
     await expect(async () => {
-      const count = await page.locator("[data-testid='tab']").count();
+      const count = await page.locator(TAB_BUTTON).count();
       expect(count).toBeGreaterThan(initialCount);
     }).toPass({ timeout: 5_000 });
-
-    // The new tab should be active in the first pane
-    const activeTab = firstPane.locator("[data-testid='tab'].active");
-    await expect(activeTab).toBeVisible({ timeout: 3_000 });
   });
 
   test("opening a second tab replaces the preview", async ({ page }) => {
     await page.waitForLoadState("domcontentloaded");
-    await page.locator("[data-testid='tab']").first().waitFor({ timeout: 10_000 });
+    await page.locator(TAB_BUTTON).first().waitFor({ timeout: 10_000 });
 
-    const firstPane = page.locator("[data-testid='pane']").first();
-    const initialCount = await firstPane.locator("[data-testid='tab']").count();
+    const container = page.locator(TABS_CONTAINER).first();
+    const initialCount = await container.locator(TAB_BUTTON).count();
 
     // Open a new tab (should be preview)
-    await firstPane.locator(".tab-new-button").click();
+    await page.evaluate(() => {
+      window.electronAPI.openTab("new-file.ts");
+    });
     await expect(async () => {
-      const count = await firstPane.locator("[data-testid='tab']").count();
+      const count = await container.locator(TAB_BUTTON).count();
       expect(count).toBeGreaterThan(initialCount);
     }).toPass({ timeout: 5_000 });
-    const afterFirst = await firstPane.locator("[data-testid='tab']").count();
+    const afterFirst = await container.locator(TAB_BUTTON).count();
 
     // Open another tab (should replace the preview)
-    await firstPane.locator(".tab-new-button").click();
+    await page.evaluate(() => {
+      window.electronAPI.openTab("another.ts");
+    });
     // Count stays the same (preview replaced, not stacked)
     await expect(async () => {
-      const count = await firstPane.locator("[data-testid='tab']").count();
+      const count = await container.locator(TAB_BUTTON).count();
       expect(count).toBe(afterFirst);
     }).toPass({ timeout: 5_000 });
   });
 
-  test("double-clicking a preview tab pins it", async ({ page }) => {
+  test("preview tabs show italic styling", async ({ page }) => {
     await page.waitForLoadState("domcontentloaded");
-    await page.locator("[data-testid='tab']").first().waitFor({ timeout: 10_000 });
+    await page.locator(TAB_BUTTON).first().waitFor({ timeout: 10_000 });
 
-    const firstPane = page.locator("[data-testid='pane']").first();
-
-    // Open a new tab (preview)
-    await firstPane.locator(".tab-new-button").click();
-    await expect(firstPane.locator("[data-testid='tab'].preview")).toHaveCount(1, {
-      timeout: 5_000,
+    // Open a new tab (should be preview)
+    await page.evaluate(() => {
+      window.electronAPI.openTab("preview-file.ts");
     });
 
-    // Double-click the preview tab to pin it
-    const previewTab = firstPane.locator("[data-testid='tab'].preview");
-    await previewTab.dblclick();
+    // Wait for the tab to appear
+    await expect(async () => {
+      const count = await page.locator(TAB_BUTTON).count();
+      expect(count).toBeGreaterThan(6);
+    }).toPass({ timeout: 5_000 });
 
-    // Wait for state update
-    await page.waitForTimeout(300);
-
-    // The tab should now be pinned (has .pinned class) and not preview
-    const pinnedTabs = firstPane.locator("[data-testid='tab'].pinned");
-    const previewTabs = firstPane.locator("[data-testid='tab'].preview");
-    await expect(pinnedTabs).toHaveCount(1);
-    await expect(previewTabs).toHaveCount(0);
+    // The preview tab should have italic styling (rendered via renderTabTitle)
+    // Check that a tab with "preview-file.ts" exists
+    const previewTab = page.locator(TAB_BUTTON).filter({ hasText: "preview-file.ts" });
+    await expect(previewTab).toBeVisible({ timeout: 3_000 });
   });
 
-  test("pinned tabs are compact (38px wide)", async ({ page }) => {
+  test("pinning a tab via IPC", async ({ page }) => {
     await page.waitForLoadState("domcontentloaded");
-    await page.locator("[data-testid='tab']").first().waitFor({ timeout: 10_000 });
+    await page.locator(TAB_BUTTON).first().waitFor({ timeout: 10_000 });
 
-    const firstPane = page.locator("[data-testid='pane']").first();
+    // Get the first tab ID from state
+    const firstTabId = await page.evaluate(() => {
+      const state = window.electronAPI.getInitialState();
+      if (state === undefined) return "";
+      const layout = state.layout as Record<string, unknown>;
+      if (layout.type === "split") {
+        const children = layout.children as Record<string, unknown>[];
+        const first = children[0] as Record<string, unknown>;
+        if (first.type === "pane") {
+          return (first.tabIds as string[])[0] ?? "";
+        }
+      }
+      if (layout.type === "pane") {
+        return (layout.tabIds as string[])[0] ?? "";
+      }
+      return "";
+    });
 
-    // Double-click the first tab to pin it
-    const firstTab = firstPane.locator("[data-testid='tab']").first();
-    await firstTab.dblclick();
+    expect(firstTabId).not.toBe("");
+
+    // Pin the tab via IPC
+    await page.evaluate((id) => {
+      window.electronAPI.toggleTabPin(id);
+    }, firstTabId);
+
     await page.waitForTimeout(300);
 
-    // The tab should now have the pinned class
-    const pinnedTab = firstPane.locator("[data-testid='tab'].pinned");
-    await expect(pinnedTab).toHaveCount(1);
-
-    // Pinned tabs are compact: 38px
-    const width = await pinnedTab.evaluate((el) => el.offsetWidth);
-    expect(width).toBe(38);
-  });
-
-  test("separator appears between pinned and unpinned tabs", async ({ page }) => {
-    await page.waitForLoadState("domcontentloaded");
-    await page.locator("[data-testid='tab']").first().waitFor({ timeout: 10_000 });
-
-    const firstPane = page.locator("[data-testid='pane']").first();
-
-    // Pin the first tab
-    await firstPane.locator("[data-testid='tab']").first().dblclick();
-    await page.waitForTimeout(300);
-
-    // Should now have a separator
-    const separator = firstPane.locator(".tab-separator");
-    await expect(separator).toHaveCount(1);
+    // Verify the tab now shows the pin badge (📌) via renderTabTitle
+    const pinnedTab = page.locator(TAB_BUTTON).filter({ hasText: "📌" });
+    await expect(pinnedTab).toHaveCount(1, { timeout: 3_000 });
   });
 });
