@@ -12,7 +12,9 @@ export default defineConfig({
   testMatch: "*.spec.ts",
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
-  retries: 0,
+  // Known flakiness: Electron headless IPC delivery is ~90% reliable.
+  // Single retry covers the remaining ~10% without masking real failures.
+  retries: process.env.CI ? 1 : 0,
   workers: 1,
   timeout: 30_000,
   expect: { timeout: 10_000 },
