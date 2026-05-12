@@ -45,6 +45,119 @@ html, body, #root {
   background: var(--accent) !important;
 }
 
+/* ─── Mosaic tile content ─────────────────────────────── */
+
+.mosaic-tile-content {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-surface);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.tile-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: var(--bg-dark);
+  border-bottom: 1px solid var(--border);
+  min-height: 32px;
+  flex-shrink: 0;
+}
+
+.tile-drag-handle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  cursor: grab;
+  min-width: 0;
+}
+
+.tile-drag-handle:active {
+  cursor: grabbing;
+}
+
+.tile-title {
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tile-badge {
+  font-size: 10px;
+  line-height: 1;
+}
+
+.preview-badge {
+  color: #a0c070;
+  font-style: italic;
+}
+
+.dirty-badge {
+  color: #d4a05a;
+}
+
+.tile-close-button {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 3px;
+  opacity: 0;
+  transition: opacity 0.1s;
+  flex-shrink: 0;
+}
+
+.tile-toolbar:hover .tile-close-button {
+  opacity: 0.6;
+}
+
+.tile-close-button:hover {
+  opacity: 1 !important;
+  background: var(--bg-tab);
+}
+
+.tile-body {
+  flex: 1;
+  overflow: auto;
+}
+
+/* Tab bar styling for mosaic's built-in tabs */
+.mosaic .mosaic-tabs {
+  background: var(--bg-dark) !important;
+  border-bottom: 1px solid var(--border) !important;
+}
+
+.mosaic .mosaic-tab {
+  background: var(--bg-tab) !important;
+  color: var(--text-muted) !important;
+  border: none !important;
+  border-radius: 4px 4px 0 0 !important;
+  padding: 4px 10px !important;
+  font-size: 12px !important;
+  margin-right: 1px !important;
+}
+
+.mosaic .mosaic-tab.active {
+  background: var(--bg-surface) !important;
+  color: var(--text-primary) !important;
+}
+
+.mosaic .mosaic-tab:hover {
+  background: var(--bg-tab-active) !important;
+}
+
+.mosaic-root-container {
+  height: 100%;
+  width: 100%;
+}
+
 /* ─── Pane ─────────────────────────────────────────────── */
 
 .pane {
