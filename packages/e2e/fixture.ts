@@ -134,8 +134,16 @@ export const test = base.extend<ElectronTestFixture & ViteFixture>({
 
   page: async ({ electronApp }, use) => {
     const page = await electronApp.firstWindow();
+    await page.waitForLoadState("domcontentloaded");
     await use(page);
   },
 });
+
+/** Helper: convert the first window to a 2-pane split layout. */
+export async function setupSplitLayout(page: Page): Promise<void> {
+  const windowId = await page.evaluate(() => window.electronAPI.getWindowId());
+  await page.evaluate((id) => window.electronAPI.testSetSplitLayout(id), windowId);
+  await page.waitForTimeout(500);
+}
 
 export { expect };

@@ -11,11 +11,16 @@
  * This avoids the headless DnD limitations while still testing the
  * main-process state management end-to-end.
  */
-import { test, expect } from "./fixture";
+import { test, expect, setupSplitLayout } from "./fixture";
 import type { Page, ElectronApplication } from "@playwright/test";
 
 const TAB_BUTTON = '.tab-button';
 const TABS_CONTAINER = ".pane";
+
+
+test.beforeEach(async ({ page }) => {
+  await setupSplitLayout(page);
+});
 
 test.describe("Cross-window tab drag", () => {
   /**

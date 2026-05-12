@@ -7,10 +7,15 @@
  * - Double-clicking a preview tab pins it
  * - Pinned tabs show compact rendering
  */
-import { test, expect } from "./fixture";
+import { test, expect, setupSplitLayout } from "./fixture";
 
 const TAB_BUTTON = '.tab-button';
 const TABS_CONTAINER = ".pane";
+
+
+test.beforeEach(async ({ page }) => {
+  await setupSplitLayout(page);
+});
 
 test.describe("Tab opening and preview model", () => {
   test("clicking + button adds a new tab", async ({ page }) => {

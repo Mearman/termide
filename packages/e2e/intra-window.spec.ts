@@ -1,9 +1,14 @@
-import { test, expect } from "./fixture";
+import { test, expect, setupSplitLayout } from "./fixture";
 
 /** Selector for the draggable tab buttons in mosaic tab bars. */
 const TAB_BUTTON = '.tab-button';
 /** Selector for mosaic tab group containers. */
 const TABS_CONTAINER = ".pane";
+
+
+test.beforeEach(async ({ page }) => {
+  await setupSplitLayout(page);
+});
 
 test.describe("Intra-window tab activation", () => {
   test("clicking a tab activates it", async ({ page }) => {
@@ -41,6 +46,11 @@ test.describe("Intra-window tab activation", () => {
     await expect(leftTabs.nth(2)).toHaveClass(/active/);
     await expect(leftTabs.first()).not.toHaveClass(/active/);
   });
+});
+
+
+test.beforeEach(async ({ page }) => {
+  await setupSplitLayout(page);
 });
 
 test.describe("Intra-window tab drag between panes", () => {

@@ -157,7 +157,7 @@ ipcMain.handle("test-create-window", async (_event): Promise<number> => {
   });
 
   // Register with a fresh copy of the initial demo state
-  registerWindow(win.id);
+  registerWindow(win.id, { splitLayout: true });
 
   const RENDERER_URL = process.env.RENDERER_URL ?? "http://localhost:5173";
   if (!RENDERER_URL.startsWith("file://")) {
@@ -195,6 +195,26 @@ ipcMain.on("test-position-window", (
   if (win !== null && !win.isDestroyed()) {
     win.setBounds({ x: opts.x, y: opts.y, width: opts.width, height: opts.height });
   }
+  event.returnValue = true;
+});
+
+/** Convert a window's layout to a split (for tests needing 2-pane setup). */
+ipcMain.on("test-set-split-layout", (event, windowId: number): void => {
+  const ws = appState.windows[windowId];
+  if (ws === undefined) { event.returnValue = false; return; }
+  const tabIds = ws.layout.type === "pane" ? ws.layout.tabIds : [];
+  if (tabIds.length < 2) { event.returnValue = false; return; }
+  const mid = Math.ceil(tabIds.length / 2);
+  ws.layout = {
+    type: "split",
+    direction: "row",
+    sizes: [50, 50],
+    children: [
+      { type: "pane", tabIds: tabIds.slice(0, mid), pinnedTabIds: [], activeTabId: tabIds[0]! },
+      { type: "pane", tabIds: tabIds.slice(mid), pinnedTabIds: [], activeTabId: tabIds[mid]! },
+    ],
+  };
+  pushStateToWindow(windowId);
   event.returnValue = true;
 });
 

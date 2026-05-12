@@ -48,8 +48,17 @@ function removeTab(layout: LayoutNode, tabId: string): boolean {
 }
 
 function paneIdentity(pane: PaneNode): string {
-  // Use first tab ID as a stable identity for a pane within a render pass
   return pane.tabIds[0] ?? "__empty__";
+}
+
+function findParentOfPane(node: LayoutNode, paneId: string): SplitNode | undefined {
+  if (node.type === "pane") return undefined;
+  for (const child of node.children) {
+    if (child.type === "pane" && paneIdentity(child) === paneId) return node;
+    const found = findParentOfPane(child, paneId);
+    if (found !== undefined) return found;
+  }
+  return undefined;
 }
 
 // ─── App component ────────────────────────────────────────
@@ -167,6 +176,61 @@ export function App(): React.ReactElement | null {
   const handleOpenTab = useCallback((title: string) => { electron.openTab(title); }, []);
   const handleTogglePin = useCallback((tabId: string) => { electron.toggleTabPin(tabId); }, []);
 
+  const handleSplitPane = useCallback((targetPaneId: string, tabId: string, direction: "row" | "column", side: "before" | "after") => {
+    if (state === undefined) return;
+    const layout = cloneLayout(state.layout);
+    removeTab(layout, tabId);
+
+    // Create a new pane for the dragged tab
+    const newPane: PaneNode = {
+      type: "pane",
+      tabIds: [tabId],
+      pinnedTabIds: [],
+      activeTabId: tabId,
+    };
+
+    // Find the target pane and wrap it in a split
+    const parent = findParentOfPane(layout, targetPaneId);
+    if (parent === undefined) {
+      // Target is the root pane — replace root with a split
+      const root = layout as PaneNode;
+      const newLayout: SplitNode = {
+        type: "split",
+        direction,
+        sizes: [50, 50],
+        children: side === "before" ? [newPane, root] : [root, newPane],
+      };
+      syncLayout(newLayout);
+    } else {
+      // Insert into parent's children at the right position
+      const targetIdx = parent.children.findIndex(c => {
+        if (c.type === "pane") return paneIdentity(c) === targetPaneId;
+        return false;
+      });
+      const insertIdx = side === "before" ? targetIdx : targetIdx + 1;
+
+      if (parent.direction === direction) {
+        // Same direction — just insert alongside
+        parent.children.splice(insertIdx, 0, newPane);
+        parent.sizes.splice(insertIdx, 0, 0);
+        // Redistribute
+        const n = parent.sizes.length;
+        parent.sizes = Array(n).fill(100 / n);
+      } else {
+        // Different direction — wrap the target pane in a new split
+        const targetChild = parent.children[targetIdx]! as PaneNode;
+        const innerSplit: SplitNode = {
+          type: "split",
+          direction,
+          sizes: [50, 50],
+          children: side === "before" ? [newPane, targetChild] : [targetChild, newPane],
+        };
+        parent.children[targetIdx] = innerSplit;
+      }
+      syncLayout(layout);
+    }
+  }, [state, syncLayout]);
+
   if (error !== undefined) return <div className="error">{error}</div>;
   if (state === undefined) return <div className="loading">Loading…</div>;
 
@@ -182,6 +246,7 @@ export function App(): React.ReactElement | null {
         onTabDragStart={handleTabDragStart}
         onTabDragEnd={handleTabDragEnd}
         onPaneDrop={handlePaneDrop}
+        onSplitPane={handleSplitPane}
         onOpenTab={handleOpenTab}
         onContextMenu={(tabId, x, y) => setContextMenu({ tabId, x, y })}
       />
@@ -209,6 +274,7 @@ interface Callbacks {
   onTabDragStart: (e: React.DragEvent, tabId: string) => void;
   onTabDragEnd: (e: React.DragEvent) => void;
   onPaneDrop: (targetPaneId: string, tabId: string, insertIndex: number) => void;
+  onSplitPane: (targetPaneId: string, tabId: string, direction: "row" | "column", side: "before" | "after") => void;
   onOpenTab: (title: string) => void;
   onContextMenu: (tabId: string, x: number, y: number) => void;
 }
@@ -290,6 +356,7 @@ function Split(props: {
               onTabDragStart={props.onTabDragStart}
               onTabDragEnd={props.onTabDragEnd}
               onPaneDrop={props.onPaneDrop}
+              onSplitPane={props.onSplitPane}
               onOpenTab={props.onOpenTab}
               onContextMenu={props.onContextMenu}
             />
@@ -393,7 +460,43 @@ function Pane(props: {
         {dragOver && insertIdx >= pane.tabIds.length && <div className="tab-insert-indicator" />}
         <button className="tab-add" onClick={() => props.onOpenTab(NEW_TITLES[Math.floor(Math.random() * NEW_TITLES.length)])}>+</button>
       </div>
-      <div className="pane-content">
+      <div
+        className="pane-content"
+        onDragOver={e => {
+          if (!e.dataTransfer.types.includes("application/tab-id")) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "move";
+        }}
+        onDrop={e => {
+          const tabId = e.dataTransfer.getData("application/tab-id");
+          if (tabId === "") return;
+          e.preventDefault();
+
+          // Determine split direction and side from drop position
+          const rect = e.currentTarget.getBoundingClientRect();
+          const x = e.clientX - rect.left;
+          const y = e.clientY - rect.top;
+          const w = rect.width;
+          const h = rect.height;
+          const threshold = 0.3; // 30% edge zone
+
+          const relX = x / w;
+          const relY = y / h;
+
+          // Determine which edge zone the drop is in
+          const isLeft = relX < threshold;
+          const isRight = relX > 1 - threshold;
+          const isTop = relY < threshold;
+          const isBottom = relY > 1 - threshold;
+
+          if (isLeft || isRight) {
+            props.onSplitPane(pid, tabId, "row", isLeft ? "before" : "after");
+          } else if (isTop || isBottom) {
+            props.onSplitPane(pid, tabId, "column", isTop ? "before" : "after");
+          }
+          // Centre zone: do nothing (tab stays where it is)
+        }}
+      >
         <ContentArea tab={tabs[pane.activeTabId]} tabId={pane.activeTabId} />
       </div>
     </div>

@@ -40,4 +40,5 @@ contextBridge.exposeInMainWorld("electronAPI", {
   testCreateWindow: () => ipcRenderer.invoke("test-create-window"),
   testSetDragTarget: (windowId) => ipcRenderer.sendSync("test-set-drag-target", windowId),
   testPositionWindow: (opts) => ipcRenderer.sendSync("test-position-window", opts),
+  testSetSplitLayout: (windowId) => ipcRenderer.sendSync("test-set-split-layout", windowId),
 });

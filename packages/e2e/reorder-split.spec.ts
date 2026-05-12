@@ -1,7 +1,12 @@
-import { test, expect } from "./fixture";
+import { test, expect, setupSplitLayout } from "./fixture";
 
 const TAB_BUTTON = '.tab-button';
 const TABS_CONTAINER = ".pane";
+
+
+test.beforeEach(async ({ page }) => {
+  await setupSplitLayout(page);
+});
 
 test.describe("Tab reordering within a pane", () => {
   test("tab count stays the same after reordering", async ({ page }) => {
@@ -41,6 +46,11 @@ test.describe("Tab reordering within a pane", () => {
     const totalTabs = await page.locator(TAB_BUTTON).count();
     expect(totalTabs).toBe(6);
   });
+});
+
+
+test.beforeEach(async ({ page }) => {
+  await setupSplitLayout(page);
 });
 
 test.describe("Dynamic pane splitting", () => {

@@ -28,7 +28,7 @@ export const appState: AppState = {
   windows: {},
 };
 
-export function registerWindow(windowId: number): void {
+export function registerWindow(windowId: number, options?: { splitLayout?: boolean }): void {
   // Each window gets its own independent set of tabs with unique IDs.
   const windowTabs: Record<string, Tab> = {};
   const demoTabMeta = [
@@ -44,15 +44,24 @@ export function registerWindow(windowId: number): void {
     windowTabs[t.id] = t;
   }
 
-  const layout: SplitNode = {
-    type: "split",
-    direction: "row",
-    sizes: [50, 50],
-    children: [
-      makePane(windowDemoTabs[0].id, windowDemoTabs[1].id, windowDemoTabs[2].id),
-      makePane(windowDemoTabs[3].id, windowDemoTabs[4].id, windowDemoTabs[5].id),
-    ],
-  };
+  const layout: LayoutNode = options?.splitLayout
+    ? {
+        type: "split",
+        direction: "row",
+        sizes: [50, 50],
+        children: [
+          makePane(windowDemoTabs[0].id, windowDemoTabs[1].id, windowDemoTabs[2].id),
+          makePane(windowDemoTabs[3].id, windowDemoTabs[4].id, windowDemoTabs[5].id),
+        ],
+      }
+    : makePane(
+        windowDemoTabs[0].id,
+        windowDemoTabs[1].id,
+        windowDemoTabs[2].id,
+        windowDemoTabs[3].id,
+        windowDemoTabs[4].id,
+        windowDemoTabs[5].id,
+      );
 
   appState.windows[windowId] = {
     windowId,

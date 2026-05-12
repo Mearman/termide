@@ -28,6 +28,7 @@ export interface ElectronAPI {
   testCreateWindow: () => Promise<number>;
   testSetDragTarget: (windowId: number | undefined) => number | undefined;
   testPositionWindow: (opts: { windowId: number; x: number; y: number; width: number; height: number }) => boolean;
+  testSetSplitLayout: (windowId: number) => boolean;
 }
 
 declare global {
