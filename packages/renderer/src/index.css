@@ -211,36 +211,54 @@ html, body, #root {
 /* ─── Blueprint.js theme purge ─────────────────────────── */
 /* Override mosaic-blueprint-theme styles with our dark theme. */
 
-.mosaic-blueprint-theme .drop-target-container .drop-target {
+/* Tile-level drop targets (content area — for split placement) */
+.mosaic-blueprint-theme .drop-target-container .drop-target,
+.mosaic .drop-target-container .drop-target {
   background: var(--drop-target) !important;
+  transition: background 0.15s !important;
+}
+
+.mosaic-blueprint-theme .drop-target-container .drop-target.drop-target-hover,
+.mosaic .drop-target-container .drop-target.drop-target-hover {
+  background: rgba(137, 180, 250, 0.25) !important;
 }
 
 .mosaic .mosaic-preview {
   background: var(--bg-dark) !important;
-  border: 1px dashed var(--border) !important;
-  opacity: 0.7;
+  border: 1px solid var(--border) !important;
+  border-radius: 4px;
+}
+
+.mosaic .mosaic-preview .mosaic-window-toolbar {
+  background: var(--bg-surface) !important;
+  box-shadow: none !important;
+}
+
+.mosaic .mosaic-preview .mosaic-window-title {
+  color: var(--text-primary) !important;
+}
+
+.mosaic .mosaic-preview .mosaic-window-body {
+  background: var(--bg-surface) !important;
+  color: var(--text-muted) !important;
 }
 
 /* ─── Tab drop targets (between tabs during drag) ─────── */
 
-/* Hidden by default (mosaic sets display:none). Shown when dragging. */
-.mosaic .tab-drop-target {
-  align-self: stretch;
-  background: transparent;
-  transition: background 0.15s, width 0.15s;
+/* Mosaic's default CSS handles show/hide and sizing.
+   .tab-drop-target: display:none (hidden)
+   .tab-drop-target.dragging: display:flex, width:20px (shown during drag)
+   .tab-drop-target.tab-drop-target-hover: width:40px (hover highlight)
+   We only override colours to match our theme. */
+
+.mosaic .tab-drop-target .tab-drop-placeholder {
+  background: linear-gradient(135deg, var(--accent), #6fa8f5) !important;
+  box-shadow: 0 2px 8px rgba(137, 180, 250, 0.3) !important;
+  border-color: var(--text-primary) !important;
 }
 
-/* Mosaic adds .dragging when any tab drag is active — show drop zones */
-.mosaic .tab-drop-target.dragging {
-  width: 8px;
-  min-width: 8px;
-}
-
-/* Highlight when hovering over a specific insertion point */
-.mosaic .tab-drop-target.tab-drop-target-hover {
-  background: var(--accent);
-  width: 12px;
-  min-width: 12px;
+.mosaic .tab-drop-target .tab-drop-indicator.can-drop {
+  background: var(--accent) !important;
 }
 
 /* Tab bar whole-bar drop highlight */
