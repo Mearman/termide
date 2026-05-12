@@ -61,8 +61,9 @@ test.describe("Tab Drag Prototype", () => {
     const tiles = page.locator(".mosaic-tile");
     await expect(tiles).toHaveCount(2, { timeout: 10_000 });
 
-    // Tab buttons are rendered by mosaic's tab bar
-    const tabButtons = page.locator(".mosaic-tab-button");
+    // Mosaic renders tab buttons: draggable ones in the tab bar, non-draggable
+    // ones in inactive tab overlays. Count only the interactive tab bar buttons.
+    const tabButtons = page.locator('.mosaic-tab-button[draggable="true"]');
     await expect(tabButtons).toHaveCount(6, { timeout: 10_000 });
   });
 
