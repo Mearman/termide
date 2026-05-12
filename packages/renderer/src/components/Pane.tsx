@@ -161,16 +161,27 @@ export function Pane({
       // Compute insertion indicator
       const tabEl = (e.target as HTMLElement).closest("[data-tab-id]");
       if (tabEl !== null) {
-        const tabId = (tabEl as HTMLElement).dataset.tabId;
+        const hoveredTabId = (tabEl as HTMLElement).dataset.tabId;
         const rect = tabEl.getBoundingClientRect();
         const midX = rect.left + rect.width / 2;
         const side = e.clientX < midX ? "left" : "right";
-        if (tabId !== undefined) {
-          setInsertIndicator({ tabId, side });
+        if (hoveredTabId !== undefined) {
+          setInsertIndicator({ tabId: hoveredTabId, side });
+
+          // Auto-activate: activate the hovered tab after delay
+          if (autoActivateTarget.current !== hoveredTabId) {
+            if (autoActivateTimer.current !== undefined) clearTimeout(autoActivateTimer.current);
+            autoActivateTarget.current = hoveredTabId;
+            autoActivateTimer.current = setTimeout(() => {
+              if (autoActivateTarget.current !== undefined) {
+                onSetActiveTab(autoActivateTarget.current);
+              }
+            }, AUTO_ACTIVATE_DELAY);
+          }
         }
       }
     },
-    [],
+    [onSetActiveTab],
   );
 
   const handleTabBarDragLeave = useCallback(() => {
@@ -256,20 +267,8 @@ export function Pane({
 
       const zone = computeDropZone(e);
       setDropZone(zone);
-
-      // Auto-activate on hover timeout
-      // (only applies when merging — hovering over content area)
-      if (zone.type === "merge") {
-        if (autoActivateTarget.current !== pane.activeTabId) {
-          if (autoActivateTimer.current !== undefined) clearTimeout(autoActivateTimer.current);
-          autoActivateTarget.current = pane.activeTabId;
-          autoActivateTimer.current = setTimeout(() => {
-            // Already on the active tab, no activation needed
-          }, AUTO_ACTIVATE_DELAY);
-        }
-      }
     },
-    [computeDropZone, pane.activeTabId],
+    [computeDropZone],
   );
 
   const handleContentDrop = useCallback(
