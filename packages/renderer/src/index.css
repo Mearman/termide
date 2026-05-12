@@ -221,18 +221,26 @@ html, body, #root {
   opacity: 0.7;
 }
 
-/* Tab bar drop target (between tabs during reorder) */
+/* ─── Tab drop targets (between tabs during drag) ─────── */
+
+/* Hidden by default (mosaic sets display:none). Shown when dragging. */
 .mosaic .tab-drop-target {
-  width: 2px;
-  min-width: 2px;
   align-self: stretch;
   background: transparent;
   transition: background 0.15s, width 0.15s;
 }
 
+/* Mosaic adds .dragging when any tab drag is active — show drop zones */
+.mosaic .tab-drop-target.dragging {
+  width: 8px;
+  min-width: 8px;
+}
+
+/* Highlight when hovering over a specific insertion point */
 .mosaic .tab-drop-target.tab-drop-target-hover {
   background: var(--accent);
-  width: 3px;
+  width: 12px;
+  min-width: 12px;
 }
 
 /* Tab bar whole-bar drop highlight */
