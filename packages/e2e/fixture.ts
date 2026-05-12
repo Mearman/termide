@@ -112,7 +112,7 @@ export const test = base.extend<ElectronTestFixture>({
     const teardown = async (): Promise<void> => {
       await Promise.race([
         app.close(),
-        new Promise<void>((resolve) => setTimeout(resolve, 10_000)),
+        new Promise<void>((resolve) => setTimeout(resolve, 3_000)),
       ]);
       try {
         if (app.process()?.exitCode === null) {
