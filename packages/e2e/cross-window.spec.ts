@@ -122,15 +122,14 @@ test.describe("Cross-window tab drag", () => {
     // Wait for new window
     await electronApp.waitForEvent("window", { timeout: 15_000 });
 
-    // The new window should have exactly 1 tab
+    // The new window should have exactly 1 tab — rendered as a leaf tile
+    // (no tab bar for single-tab panes in mosaic)
     const windows = electronApp.windows();
     const page2 = windows.find((w) => w !== page1)!;
-    await waitForTabs(page2, 1);
-    const newTabTitle = await page2
-      .locator(TAB_BUTTON)
-      .first()
-      .textContent();
-    expect(newTabTitle).toContain(tabTitle);
+    await page2.waitForLoadState("domcontentloaded");
+    // Check the tile content shows the torn-off tab's title
+    const newContent = page2.locator(".content-title");
+    await expect(newContent).toContainText(tabTitle, { timeout: 10_000 });
 
     // The source window should have lost the tab (5 remaining)
     await expect(page1.locator(TAB_BUTTON)).toHaveCount(5);
