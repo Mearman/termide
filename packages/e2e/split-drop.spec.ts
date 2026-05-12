@@ -72,6 +72,31 @@ test.describe("Split-on-drop", () => {
     console.log("pane count:", paneCount);
   });
 
+  test("ignores external tab IDs in renderer drop handlers", async ({ page }) => {
+    await page.waitForLoadState("domcontentloaded");
+    await page.locator(TAB_BUTTON).first().waitFor({ timeout: 10_000 });
+
+    const before = await page.evaluate(() => window.electronAPI.getInitialState()?.layout);
+
+    await page.evaluate(() => {
+      const content = document.querySelector(".pane-content");
+      if (content === null) throw new Error("missing pane content");
+      const dataTransfer = new DataTransfer();
+      dataTransfer.setData("application/tab-id", "external-tab-id");
+      const drop = new DragEvent("drop", {
+        bubbles: true,
+        cancelable: true,
+        clientX: 500,
+        clientY: 300,
+        dataTransfer,
+      });
+      content.dispatchEvent(drop);
+    });
+
+    const after = await page.evaluate(() => window.electronAPI.getInitialState()?.layout);
+    expect(after).toEqual(before);
+  });
+
   test("cannot split own pane when it is the only tab", async ({ page }) => {
     await page.waitForLoadState("domcontentloaded");
     await page.locator(TAB_BUTTON).first().waitFor({ timeout: 10_000 });

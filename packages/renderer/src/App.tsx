@@ -189,6 +189,7 @@ export function App(): React.ReactElement | null {
 
   const handlePaneDrop = useCallback((targetPaneId: string, tabId: string, insertIndex: number) => {
     if (state === undefined) return;
+    if (state.tabs[tabId] === undefined) return;
     const sourcePane = findPane(state.layout, tabId);
     if (sourcePane === undefined) return;
     const sourcePaneId = paneIdentity(sourcePane);
@@ -221,6 +222,7 @@ export function App(): React.ReactElement | null {
 
   const handleSplitPane = useCallback((targetPaneId: string, tabId: string, direction: "row" | "column", side: "before" | "after") => {
     if (state === undefined) return;
+    if (state.tabs[tabId] === undefined) return;
     const layout = cloneLayout(state.layout);
     removeTab(layout, tabId);
 
@@ -472,6 +474,7 @@ function Pane(props: {
       <div
         className={`tab-bar${dragOver ? " drag-over" : ""}`}
         onDragOver={e => {
+          if (props.draggedTabId === null) return;
           if (!e.dataTransfer.types.includes("application/tab-id")) return;
           e.preventDefault();
           e.dataTransfer.dropEffect = "move";
@@ -491,7 +494,7 @@ function Pane(props: {
           setDragOver(false);
           setInsertIdx(-1);
           const tabId = e.dataTransfer.getData("application/tab-id");
-          if (tabId === "") return;
+          if (tabId === "" || tabs[tabId] === undefined) return;
           e.preventDefault();
           props.onPaneDrop(pid, tabId, insertRef.current >= 0 ? insertRef.current : pane.tabIds.length);
           insertRef.current = -1;
@@ -530,6 +533,7 @@ function Pane(props: {
       <div
         className="pane-content"
         onDragOver={e => {
+          if (props.draggedTabId === null) return;
           if (!e.dataTransfer.types.includes("application/tab-id")) return;
           e.preventDefault();
           e.dataTransfer.dropEffect = "move";
@@ -545,7 +549,7 @@ function Pane(props: {
         }}
         onDrop={e => {
           const tabId = e.dataTransfer.getData("application/tab-id");
-          if (tabId === "") return;
+          if (tabId === "" || tabs[tabId] === undefined) return;
           e.preventDefault();
           e.stopPropagation();
           setSplitZone(null);
