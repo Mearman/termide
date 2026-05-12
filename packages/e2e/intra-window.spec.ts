@@ -14,26 +14,7 @@ async function dragTab(
   source: import("@playwright/test").Locator,
   target: import("@playwright/test").Locator,
 ): Promise<void> {
-  const sourceBox = await source.boundingBox();
-  const targetBox = await target.boundingBox();
-  if (sourceBox === null || targetBox === null) return;
-
-  const startX = sourceBox.x + sourceBox.width / 2;
-  const startY = sourceBox.y + sourceBox.height / 2;
-  const endX = targetBox.x + targetBox.width / 2;
-  const endY = targetBox.y + targetBox.height / 2;
-
-  await page.mouse.move(startX, startY);
-  await page.mouse.down();
-  // Move in steps so react-dnd tracks the drag
-  const steps = 5;
-  for (let i = 1; i <= steps; i++) {
-    await page.mouse.move(
-      startX + (endX - startX) * (i / steps),
-      startY + (endY - startY) * (i / steps),
-    );
-  }
-  await page.mouse.up();
+  await source.dragTo(target, { force: true });
 }
 
 test.describe("Intra-window tab activation", () => {
