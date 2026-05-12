@@ -116,17 +116,19 @@ export const test = base.extend<ElectronTestFixture & ViteFixture>({
     // 3. Provide to test
     await use(app);
 
-    // 4. Teardown with force-kill fallback
-    await Promise.race([
-      app.close(),
-      new Promise<void>((resolve) => setTimeout(resolve, 3_000)),
-    ]);
+    // 4. Teardown — kill the process immediately
+    // CDP Browser.close() is unreliable for Electron (doesn't clean up
+    // main process windows, intervals, etc.). SIGKILL is the sure way.
     try {
-      if (app.process()?.exitCode === null) {
-        app.process()?.kill("SIGKILL");
-      }
+      app.process()?.kill("SIGKILL");
     } catch {
       // Process already exited
+    }
+    // Wait for process to actually exit
+    try {
+      await app.close();
+    } catch {
+      // Already killed
     }
   },
 
