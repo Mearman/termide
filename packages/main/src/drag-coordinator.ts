@@ -305,19 +305,21 @@ function buildGhostHTML(payload: DragTabStartPayload): string {
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
-    background: rgba(30, 30, 30, 0.85);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 6px;
+    background: transparent;
     overflow: hidden;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
   }
-  .tab {
+  .tab-card {
     display: flex;
     align-items: center;
     gap: 8px;
     padding: 8px 14px;
     height: ${GHOST_HEIGHT}px;
-    color: #e0e0e0;
+    background: rgba(69, 71, 90, 0.92);
+    border: 1px solid rgba(137, 180, 250, 0.4);
+    border-radius: 6px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(137, 180, 250, 0.1);
+    color: #cdd6f4;
     font-size: 13px;
   }
   .dot {
@@ -334,7 +336,7 @@ function buildGhostHTML(payload: DragTabStartPayload): string {
 </style>
 </head>
 <body>
-  <div class="tab">
+  <div class="tab-card">
     <div class="dot" style="background-color: ${payload.tabColour}"></div>
     <span class="title">${escapedTitle}</span>
   </div>
