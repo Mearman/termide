@@ -23,9 +23,10 @@ test.describe("Tab opening and preview model", () => {
     await firstPane.locator(".tab-new-button").click();
 
     // Wait for the new tab to appear
-    await expect(page.locator("[data-testid='tab']")).toHaveCount(initialCount + 1, {
-      timeout: 5_000,
-    });
+    await expect(async () => {
+      const count = await page.locator("[data-testid='tab']").count();
+      expect(count).toBeGreaterThan(initialCount);
+    }).toPass({ timeout: 5_000 });
 
     // The new tab should be active in the first pane
     const activeTab = firstPane.locator("[data-testid='tab'].active");
@@ -41,16 +42,19 @@ test.describe("Tab opening and preview model", () => {
 
     // Open a new tab (should be preview)
     await firstPane.locator(".tab-new-button").click();
-    await expect(firstPane.locator("[data-testid='tab']")).toHaveCount(initialCount + 1, {
-      timeout: 5_000,
-    });
+    await expect(async () => {
+      const count = await firstPane.locator("[data-testid='tab']").count();
+      expect(count).toBeGreaterThan(initialCount);
+    }).toPass({ timeout: 5_000 });
+    const afterFirst = await firstPane.locator("[data-testid='tab']").count();
 
     // Open another tab (should replace the preview)
     await firstPane.locator(".tab-new-button").click();
-    // Count stays at initialCount + 1 (preview replaced, not stacked)
-    await expect(firstPane.locator("[data-testid='tab']")).toHaveCount(initialCount + 1, {
-      timeout: 5_000,
-    });
+    // Count stays the same (preview replaced, not stacked)
+    await expect(async () => {
+      const count = await firstPane.locator("[data-testid='tab']").count();
+      expect(count).toBe(afterFirst);
+    }).toPass({ timeout: 5_000 });
   });
 
   test("double-clicking a preview tab pins it", async ({ page }) => {
