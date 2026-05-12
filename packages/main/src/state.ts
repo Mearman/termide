@@ -287,7 +287,7 @@ function findPaneContainingTab(node: LayoutNode, tabId: string): PaneNode | unde
   return undefined;
 }
 
-function pushStateToWindow(windowId: number): void {
+export function pushStateToWindow(windowId: number): void {
   // Re-export for use by index.ts
   const win = BrowserWindow.fromId(windowId);
   const state = appState.windows[windowId];

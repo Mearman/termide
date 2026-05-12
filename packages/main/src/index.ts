@@ -2,11 +2,16 @@
  * Main process entry point. Orchestrates window creation, state, and drag coordination.
  */
 import { app, BrowserWindow, ipcMain, screen } from "electron";
+
+// Enable headless mode when launched with --headless flag (for E2E tests)
+if (process.argv.includes("--headless=new") || process.argv.includes("--headless")) {
+  app.commandLine.appendSwitch("headless", "new");
+}
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createMainWindow, createWindowWithTab } from "./window-manager.ts";
-import { appState, updateWindowLayout, moveTabCrossWindow, registerWindow, toggleTabPin, openTabInWindow } from "./state.ts";
-import { startDrag, endDrag, setDragTargetForTest, getDragTargetForTest, reportDragTargetEnter, reportDragTargetLeave } from "./drag-coordinator.ts";
+import { appState, updateWindowLayout, moveTabCrossWindow, registerWindow, toggleTabPin, openTabInWindow, pushStateToWindow } from "./state.ts";
+import { startDrag, endDrag, setDragTargetForTest, getDragTargetForTest, reportDragTargetEnter, reportDragTargetLeave, cleanupDragCoordinator } from "./drag-coordinator.ts";
 import type { TabMovedIntraPayload, DragTabStartPayload } from "./types.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -194,6 +199,14 @@ ipcMain.on("test-position-window", (
 });
 
 // ─── App lifecycle ────────────────────────────────────────
+
+app.on("before-quit", (): void => {
+  cleanupDragCoordinator();
+});
+
+app.on("will-quit", (): void => {
+  cleanupDragCoordinator();
+});
 
 app.on("window-all-closed", (): void => {
   app.quit();

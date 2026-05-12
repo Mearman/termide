@@ -102,8 +102,21 @@ export const test = base.extend<ElectronTestFixture>({
     // 4. Provide to test
     await use(app);
 
-    // 5. Teardown
-    await app.close();
+    // 5. Teardown with force-kill fallback
+    const teardown = async (): Promise<void> => {
+      await Promise.race([
+        app.close(),
+        new Promise<void>((resolve) => setTimeout(resolve, 10_000)),
+      ]);
+      try {
+        if (app.process()?.exitCode === null) {
+          app.process()?.kill("SIGKILL");
+        }
+      } catch {
+        // Process already exited
+      }
+    };
+    await teardown();
     await server.close();
   },
 

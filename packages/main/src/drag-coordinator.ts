@@ -33,6 +33,14 @@ interface ActiveDrag {
   targetExplicit: boolean;
   pollInterval: ReturnType<typeof setInterval>;
   onComplete: DragCompletionHandler;
+  /** Semi-transparent ghost window following the cursor during drag. */
+  ghostWindow: BrowserWindow | undefined;
+  /** Whether the cursor has left the source window (ghost should be visible). */
+  cursorOutsideSource: boolean;
+  /** Payload data for lazy ghost window creation. */
+  ghostPayload: DragTabStartPayload;
+  /** Tick count since cursor left source window — used to debounce ghost creation. */
+  ticksOutsideSource: number;
 }
 
 let activeDrag: ActiveDrag | undefined;
@@ -119,6 +127,9 @@ export function startDrag(
   }
 
   const pollInterval = setInterval(() => tick(), 16);
+  // Don't let the poll interval prevent process exit
+  pollInterval.unref();
+
   activeDrag = {
     sourceWindowId: payload.windowId,
     tabId: payload.tabId,
@@ -126,6 +137,10 @@ export function startDrag(
     targetExplicit: false,
     pollInterval,
     onComplete,
+    ghostWindow: undefined,
+    cursorOutsideSource: false,
+    ghostPayload: payload,
+    ticksOutsideSource: 0,
   };
 }
 
@@ -168,9 +183,21 @@ function cancelDrag(): void {
   broadcastDragLeave();
 }
 
+/**
+ * Force cleanup of any active drag state (for app shutdown).
+ */
+export function cleanupDragCoordinator(): void {
+  if (activeDrag !== undefined) {
+    cancelDrag();
+  }
+}
+
 function teardown(): void {
   if (activeDrag === undefined) return;
   clearInterval(activeDrag.pollInterval);
+  if (activeDrag.ghostWindow !== undefined && !activeDrag.ghostWindow.isDestroyed()) {
+    activeDrag.ghostWindow.destroy(); // Use destroy() instead of close() for immediate cleanup
+  }
   activeDrag = undefined;
 }
 
@@ -182,6 +209,139 @@ function broadcastDragLeave(): void {
   }
 }
 
+// ─── Ghost window ────────────────────────────────────────
+
+const GHOST_WIDTH = 300;
+const GHOST_HEIGHT = 60;
+const GHOST_OFFSET_X = 12;
+const GHOST_OFFSET_Y = 12;
+/** Number of ticks the cursor must be outside before the ghost window is created. ~80ms. */
+const GHOST_DEBOUNCE_TICKS = 5;
+
+/**
+ * Position and show/hide the ghost window based on cursor position.
+ * The ghost is only visible when the cursor is outside the source window.
+ */
+function updateGhostWindow(cursor: { x: number; y: number }): void {
+  if (activeDrag === undefined) return;
+
+  const sourceWin = BrowserWindow.fromId(activeDrag.sourceWindowId);
+  const isOverSource = sourceWin !== null && !sourceWin.isDestroyed() && isPointInBounds(cursor, sourceWin.getBounds());
+  const isOverTarget = activeDrag.hoveredWindowId !== undefined;
+
+  const outsideSource = !isOverSource && !isOverTarget;
+
+  // Track how long the cursor has been outside
+  if (outsideSource) {
+    activeDrag.ticksOutsideSource++;
+  } else {
+    activeDrag.ticksOutsideSource = 0;
+  }
+
+  // Only create/show ghost after sustained period outside
+  const shouldShow = activeDrag.ticksOutsideSource >= GHOST_DEBOUNCE_TICKS;
+
+  // Create ghost window lazily when first needed
+  if (shouldShow && activeDrag.ghostWindow === undefined) {
+    activeDrag.ghostWindow = new BrowserWindow({
+      width: GHOST_WIDTH,
+      height: GHOST_HEIGHT,
+      frame: false,
+      transparent: true,
+      resizable: false,
+      alwaysOnTop: true,
+      skipTaskbar: true,
+      hasShadow: false,
+      show: false,
+      focusable: false,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+      },
+    });
+    activeDrag.ghostWindow.loadURL(
+      `data:text/html;charset=utf-8,${encodeURIComponent(buildGhostHTML(activeDrag.ghostPayload))}`,
+    );
+  }
+
+  const ghost = activeDrag.ghostWindow;
+  if (ghost === undefined || ghost.isDestroyed()) return;
+
+  if (shouldShow !== activeDrag.cursorOutsideSource) {
+    activeDrag.cursorOutsideSource = shouldShow;
+    if (shouldShow) {
+      ghost.showInactive();
+    } else {
+      ghost.hide();
+    }
+  }
+
+  if (shouldShow) {
+    ghost.setPosition(
+      Math.round(cursor.x + GHOST_OFFSET_X),
+      Math.round(cursor.y + GHOST_OFFSET_Y),
+    );
+  }
+}
+
+function isPointInBounds(point: { x: number; y: number }, bounds: Electron.Rectangle): boolean {
+  return (
+    point.x >= bounds.x &&
+    point.x <= bounds.x + bounds.width &&
+    point.y >= bounds.y &&
+    point.y <= bounds.y + bounds.height
+  );
+}
+
+function buildGhostHTML(payload: DragTabStartPayload): string {
+  const escapedTitle = payload.tabTitle
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+  return `<!DOCTYPE html>
+<html>
+<head>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: rgba(30, 30, 30, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 6px;
+    overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  .tab {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    height: ${GHOST_HEIGHT}px;
+    color: #e0e0e0;
+    font-size: 13px;
+  }
+  .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .title {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+</style>
+</head>
+<body>
+  <div class="tab">
+    <div class="dot" style="background-color: ${payload.tabColour}"></div>
+    <span class="title">${escapedTitle}</span>
+  </div>
+</body>
+</html>`;
+}
+
 // ─── Cursor polling fallback ──────────────────────────────
 
 /**
@@ -190,9 +350,14 @@ function broadcastDragLeave(): void {
  */
 function tick(): void {
   if (activeDrag === undefined) return;
-  if (activeDrag.targetExplicit) return; // broadcast/test has priority
 
   const cursor = screen.getCursorScreenPoint();
+
+  // Update ghost window position and visibility
+  updateGhostWindow(cursor);
+
+  if (activeDrag.targetExplicit) return; // broadcast/test has priority
+
   const newHoveredId = findWindowAtPoint(cursor, activeDrag.sourceWindowId);
 
   if (newHoveredId !== activeDrag.hoveredWindowId) {
@@ -220,9 +385,11 @@ function findWindowAtPoint(
   point: { x: number; y: number },
   sourceWindowId: number,
 ): number | undefined {
+  const ghostId = activeDrag?.ghostWindow?.id;
   for (const win of BrowserWindow.getAllWindows()) {
     if (win.isDestroyed()) continue;
     if (win.id === sourceWindowId) continue;
+    if (ghostId !== undefined && win.id === ghostId) continue;
 
     const bounds = win.getBounds();
     if (
