@@ -7,6 +7,8 @@
     "_test:ci": "playwright test --reporter=github"
   },
   "devDependencies": {
-    "@playwright/test": "^1.59"
+    "@playwright/test": "^1.59",
+    "@vitejs/plugin-react": "^4.6.0",
+    "vite": "^6.3.0"
   }
 }
