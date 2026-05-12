@@ -98,9 +98,13 @@ export function moveTabCrossWindow(
   removeTabFromLayout(fromState.layout, tabId);
   delete fromState.tabs[tabId];
 
-  // Add tab to target window
+  // Add tab to target window. Prefer the reported pane, but fall back to
+  // normal window-level insertion if that pane disappeared or was stale.
   toState.tabs[tabId] = removedTab;
-  insertTabIntoLayout(toState.layout, tabId, options.insertBeforeTabId, options.targetPaneId);
+  const inserted = insertTabIntoLayout(toState.layout, tabId, options.insertBeforeTabId, options.targetPaneId);
+  if (!inserted && options.targetPaneId !== undefined) {
+    insertTabIntoLayout(toState.layout, tabId, options.insertBeforeTabId);
+  }
 
   return { affectedWindows: [fromWindowId, toWindowId] };
 }

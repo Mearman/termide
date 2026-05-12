@@ -76,25 +76,28 @@ ipcMain.on("drag-target-leave", (_event, windowId: number): void => {
   reportDragTargetLeave(windowId);
 });
 
-ipcMain.on("drag-target-pane", (_event, data: { paneId: string }): void => {
-  setTargetPaneId(data.paneId);
+ipcMain.on("drag-target-pane", (event, data: { paneId: string }): void => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (win === null) return;
+  setTargetPaneId(win.id, data.paneId);
 });
 
 // ─── Drag completion (cross-window) ───────────────────────
 
-function handleDragComplete(result: {
+async function handleDragComplete(result: {
   tabId: string;
   sourceWindowId: number;
   targetWindowId: number | undefined;
   targetPaneId: string | undefined;
   cursorPosition: { x: number; y: number };
-}): void {
+}): Promise<void> {
   if (result.targetWindowId !== undefined) {
+    const resolvedTargetPaneId = await resolveTargetPaneId(result.targetWindowId, result.cursorPosition);
     const affected = moveTabCrossWindow(
       result.tabId,
       result.sourceWindowId,
       result.targetWindowId,
-      { targetPaneId: result.targetPaneId },
+      { targetPaneId: resolvedTargetPaneId ?? result.targetPaneId },
     );
     pushStateToWindows(affected.affectedWindows);
     closeWindowIfEmpty(result.sourceWindowId);
@@ -110,6 +113,35 @@ function handleDragComplete(result: {
       pushStateToWindows([result.sourceWindowId]);
     }
     closeWindowIfEmpty(result.sourceWindowId);
+  }
+}
+
+async function resolveTargetPaneId(
+  windowId: number,
+  cursorPosition: { x: number; y: number },
+): Promise<string | undefined> {
+  const win = BrowserWindow.fromId(windowId);
+  if (win === null || win.isDestroyed()) return undefined;
+
+  const bounds = win.getContentBounds();
+  const clientX = cursorPosition.x - bounds.x;
+  const clientY = cursorPosition.y - bounds.y;
+  if (clientX < 0 || clientY < 0 || clientX > bounds.width || clientY > bounds.height) {
+    return undefined;
+  }
+
+  const script = `(() => {
+    const pane = document.elementsFromPoint(${JSON.stringify(clientX)}, ${JSON.stringify(clientY)})
+      .find((el) => el instanceof HTMLElement && el.classList.contains("pane"));
+    return pane instanceof HTMLElement ? pane.dataset.paneId : undefined;
+  })()`;
+
+  try {
+    const value: unknown = await win.webContents.executeJavaScript(script, true);
+    return typeof value === "string" && value.length > 0 ? value : undefined;
+  } catch (error) {
+    console.error("Failed to resolve cross-window target pane", error);
+    return undefined;
   }
 }
 

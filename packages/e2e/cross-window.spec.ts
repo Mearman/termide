@@ -363,6 +363,7 @@ test.describe("Cross-window tab drag", () => {
 
     await page1.evaluate((targetWindowId) => {
       window.electronAPI.dragTargetEnter(targetWindowId);
+      window.electronAPI.dragTargetPane("__stale-pane-id__");
     }, page1WindowId);
     await expect(page1.locator(".drop-overlay")).toHaveCount(1);
 

@@ -63,6 +63,7 @@ export function reportDragTargetEnter(windowId: number): void {
   activeDrag.targetExplicit = true;
 
   if (prevId !== windowId) {
+    activeDrag.targetPaneId = undefined;
     // Leave old target
     if (prevId !== undefined) {
       const oldWin = BrowserWindow.fromId(prevId);
@@ -88,6 +89,7 @@ export function reportDragTargetLeave(windowId: number): void {
 
   activeDrag.hoveredWindowId = undefined;
   activeDrag.targetExplicit = false;
+  activeDrag.targetPaneId = undefined;
 
   const win = BrowserWindow.fromId(windowId);
   if (win !== null && !win.isDestroyed()) {
@@ -104,6 +106,9 @@ export function reportDragTargetLeave(windowId: number): void {
 export function setDragTargetForTest(windowId: number | undefined): void {
   if (activeDrag === undefined) return;
   clearInterval(activeDrag.pollInterval);
+  if (activeDrag.hoveredWindowId !== windowId) {
+    activeDrag.targetPaneId = undefined;
+  }
   activeDrag.hoveredWindowId = windowId;
   activeDrag.targetExplicit = true;
 }
@@ -115,8 +120,9 @@ export function getDragTargetForTest(): number | undefined {
   return activeDrag?.hoveredWindowId;
 }
 
-export function setTargetPaneId(paneId: string): void {
+export function setTargetPaneId(windowId: number, paneId: string): void {
   if (activeDrag === undefined) return;
+  if (activeDrag.hoveredWindowId !== windowId) return;
   activeDrag.targetPaneId = paneId;
 }
 
@@ -387,6 +393,7 @@ function tick(): void {
   const newHoveredId = findWindowAtPoint(cursor, activeDrag.sourceWindowId);
 
   if (newHoveredId !== activeDrag.hoveredWindowId) {
+    activeDrag.targetPaneId = undefined;
     if (activeDrag.hoveredWindowId !== undefined) {
       const oldWin = BrowserWindow.fromId(activeDrag.hoveredWindowId);
       if (oldWin !== null && !oldWin.isDestroyed()) {
