@@ -131,10 +131,10 @@ export function App(): React.ReactElement | null {
     }
   }, [state, syncLayout]);
 
-  const draggedTabRef = useRef<string | null>(null);
+  const [draggedTabId, setDraggedTabId] = useState<string | null>(null);
 
   const handleTabDragStart = useCallback((e: React.DragEvent, tabId: string) => {
-    draggedTabRef.current = tabId;
+    setDraggedTabId(tabId);
     e.dataTransfer.setData("application/tab-id", tabId);
     e.dataTransfer.effectAllowed = "move";
     const tab = state?.tabs[tabId];
@@ -144,7 +144,7 @@ export function App(): React.ReactElement | null {
   }, [state, windowId]);
 
   const handleTabDragEnd = useCallback((e: React.DragEvent) => {
-    draggedTabRef.current = null;
+    setDraggedTabId(null);
     electron.tabDragEnd(e.dataTransfer.dropEffect === "none");
   }, []);
 
@@ -253,7 +253,7 @@ export function App(): React.ReactElement | null {
         onSplitPane={handleSplitPane}
         onOpenTab={handleOpenTab}
         onContextMenu={(tabId, x, y) => setContextMenu({ tabId, x, y })}
-        draggedTabId={draggedTabRef.current}
+        draggedTabId={draggedTabId}
       />
       {dropOverlay && <div className="drop-overlay" />}
       {contextMenu !== undefined && (
