@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: E2E Tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            label: macos-arm64
+          - os: ubuntu-latest
+            label: linux-x64
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "26"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build preload
+        run: cd packages/main && npx tsdown
+
+      - name: Install Playwright browsers
+        run: cd packages/e2e && npx playwright install --with-deps
+
+      - name: Run E2E tests
+        run: cd packages/e2e && npx playwright test
+        env:
+          CI: true
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: test-results-${{ matrix.label }}
+          path: packages/e2e/test-results/
+          retention-days: 7
+
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "26"
+          cache: pnpm
+
+      - run: pnpm install
+
+      - name: Typecheck main
+        run: cd packages/main && npx tsc
+
+      - name: Typecheck renderer
+        run: cd packages/renderer && npx tsc --noEmit
