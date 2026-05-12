@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { Mosaic, type MosaicNode, type MosaicPath } from "react-mosaic-component";
-import type { WindowStateFromMain, LayoutNode, Tab, PaneNode, SplitNode } from "./types.ts";
+import { Mosaic, type MosaicNode } from "react-mosaic-component";
+import type { WindowStateFromMain, LayoutNode, Tab } from "./types.ts";
 
 const electron = window.electronAPI;
 
@@ -140,44 +140,17 @@ export function App(): React.ReactElement | null {
     [state, windowId],
   );
 
-  // ─── Cross-window drag ─────────────────────────────────
+  // ─── Cross-window drag hooks ────────────────────────────
+  // TODO: Wire mosaic's react-dnd drag events to cross-window coordinator.
+  // Mosaic uses react-dnd internally. When a tab drag leaves the mosaic
+  // root element, we need to notify the main process via tabDragBegin.
+  // When the drag ends, call tabDragEnd. This requires either:
+  // 1. A custom renderTabToolbar with DraggableTab wrapper, or
+  // 2. A DOM event listener on the mosaic root for dragend/pointerup.
 
-  const handleTabDragStart = useCallback(
-    (tabId: string, tabTitle: string, tabColour: string) => {
-      const tab = state?.tabs[tabId];
-      if (tab === undefined) return;
-      electron.tabDragBegin({
-        windowId,
-        tabId,
-        tabTitle,
-        tabColour,
-        tabBounds: { x: 0, y: 0, width: 0, height: 0 },
-      });
-    },
-    [windowId, state],
-  );
-
-  const handleTabDragEnd = useCallback((completed: boolean) => {
-    electron.tabDragEnd(completed);
-  }, []);
-
-  // ─── Tab actions ────────────────────────────────────────
-
-  const handleCloseTab = useCallback(
-    (tabId: string) => {
-      if (state === undefined) return;
-      // Find and remove the tab from the layout
-      const mosaic = toMosaicNode(state.layout);
-      const newMosaic = removeTabFromMosaic(mosaic, tabId);
-      if (newMosaic === undefined) return;
-      const newLayout = fromMosaicNode(newMosaic, state.tabs);
-      const newTabs = { ...state.tabs };
-      delete newTabs[tabId];
-      setState({ ...state, layout: newLayout, tabs: newTabs });
-      electron.tabMovedIntra({ windowId, layout: newLayout });
-    },
-    [state, windowId],
-  );
+  // Listen for cross-window drag enter/leave from main process
+  // (These are forwarded from BroadcastChannel polling)
+  // TODO: Re-add when cross-window drag is wired up
 
   if (error !== undefined) {
     return <div style={{ padding: 20, color: "#c75d5d" }}>Error: {error}</div>;
@@ -194,16 +167,26 @@ export function App(): React.ReactElement | null {
       <Mosaic<string>
         value={mosaicNode}
         onChange={handleMosaicChange}
-        renderTile={(tabId: string, path: MosaicPath) => (
+        renderTile={(tabId: string) => (
           <TileContent
             tabId={tabId}
             tabs={state.tabs}
-            path={path}
-            onDragStart={handleTabDragStart}
-            onDragEnd={handleTabDragEnd}
-            onClose={handleCloseTab}
           />
         )}
+        renderTabTitle={(props: { tabKey: string }) => {
+          const tab = state.tabs[props.tabKey];
+          return tab !== undefined ? (
+            <span className="mosaic-custom-tab-title">
+              <span className="tab-colour" style={{ background: tab.colour }} />
+              <span className="mosaic-tab-label">{tab.title}</span>
+              {tab.pinned && <span className="mosaic-tab-badge">📌</span>}
+              {tab.preview && <span className="mosaic-tab-badge preview-badge">preview</span>}
+              {tab.dirty && <span className="mosaic-tab-badge dirty-badge">●</span>}
+            </span>
+          ) : (
+            <span>{props.tabKey}</span>
+          );
+        }}
         className="mosaic-blueprint-theme"
         resize={{ minimumPaneSizePercentage: 5 }}
       />
@@ -216,75 +199,19 @@ export function App(): React.ReactElement | null {
 interface TileContentProps {
   tabId: string;
   tabs: Record<string, Tab>;
-  path: MosaicPath;
-  onDragStart: (tabId: string, title: string, colour: string) => void;
-  onDragEnd: (completed: boolean) => void;
-  onClose: (tabId: string) => void;
 }
 
 function TileContent({
   tabId,
   tabs,
-  onDragStart,
-  onDragEnd,
-  onClose,
 }: TileContentProps): React.ReactElement {
   const tab = tabs[tabId];
   const title = tab?.title ?? tabId;
   const colour = tab?.colour ?? "#888";
 
-  const handleDragStart = useCallback(
-    (e: React.DragEvent) => {
-      e.dataTransfer.effectAllowed = "copyMove";
-      e.dataTransfer.setData("text/plain", tabId);
-      onDragStart(tabId, title, colour);
-    },
-    [tabId, title, colour, onDragStart],
-  );
-
-  const handleDragEnd = useCallback(
-    (e: React.DragEvent) => {
-      const completed = e.dataTransfer.dropEffect === "none";
-      onDragEnd(completed);
-    },
-    [onDragEnd],
-  );
-
   return (
     <div className="mosaic-tile-content">
-      {/* Toolbar with tab title and close button */}
-      <div className="tile-toolbar">
-        <span
-          className="tile-drag-handle"
-          draggable
-          onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
-        >
-          <span className="tab-colour" style={{ background: colour }} />
-          <span className="tile-title">{title}</span>
-          {tab?.pinned && <span className="tile-badge">📌</span>}
-          {tab?.preview && <span className="tile-badge preview-badge">preview</span>}
-          {tab?.dirty && <span className="tile-badge dirty-badge">●</span>}
-        </span>
-        <button
-          className="tile-close-button"
-          onClick={() => onClose(tabId)}
-          onAuxClick={(e) => {
-            if (e.button === 1) {
-              e.preventDefault();
-              onClose(tabId);
-            }
-          }}
-          onContextMenu={(e) => {
-            e.stopPropagation();
-            window.electronAPI.toggleTabDirty(tabId);
-          }}
-        >
-          {tab?.dirty ? "●" : "×"}
-        </button>
-      </div>
-
-      {/* Content area */}
+      {/* Content area — tab bar is handled by mosaic */}
       <div className="tile-body">
         <div className="content-header">
           <span className="content-colour-dot" style={{ backgroundColor: colour }} />

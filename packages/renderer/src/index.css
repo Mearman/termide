@@ -134,7 +134,7 @@ html, body, #root {
   border-bottom: 1px solid var(--border) !important;
 }
 
-.mosaic .mosaic-tab {
+.mosaic .mosaic-tab-button {
   background: var(--bg-tab) !important;
   color: var(--text-muted) !important;
   border: none !important;
@@ -144,13 +144,37 @@ html, body, #root {
   margin-right: 1px !important;
 }
 
-.mosaic .mosaic-tab.active {
+.mosaic .mosaic-tab-button.-active {
   background: var(--bg-surface) !important;
   color: var(--text-primary) !important;
 }
 
-.mosaic .mosaic-tab:hover {
+.mosaic .mosaic-tab-button:hover {
   background: var(--bg-tab-active) !important;
+}
+
+/* Custom tab title rendering */
+.mosaic-custom-tab-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.mosaic .mosaic-tab-label {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mosaic-tab-badge {
+  font-size: 10px;
+}
+
+/* Remove mosaic's default toolbar buttons (split, close, drag) */
+.mosaic .mosaic-tab-toolbar-controls,
+.mosaic .mosaic-tab-add-button {
+  display: none !important;
 }
 
 .mosaic-root-container {
