@@ -351,6 +351,15 @@ function buildGhostHTML(payload: DragTabStartPayload): string {
 function tick(): void {
   if (activeDrag === undefined) return;
 
+  // Self-cleanup: if source window was destroyed (e.g. Playwright CDP close),
+  // cancel the drag immediately. This is the primary cleanup path —
+  // Playwright's Browser.close() does NOT trigger Electron's before-quit.
+  const sourceWin = BrowserWindow.fromId(activeDrag.sourceWindowId);
+  if (sourceWin === null || sourceWin.isDestroyed()) {
+    teardown();
+    return;
+  }
+
   const cursor = screen.getCursorScreenPoint();
 
   // Update ghost window position and visibility
