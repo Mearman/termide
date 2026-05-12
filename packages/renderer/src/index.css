@@ -208,6 +208,38 @@ html, body, #root {
   display: none !important;
 }
 
+/* ─── Blueprint.js theme purge ─────────────────────────── */
+/* Override mosaic-blueprint-theme styles with our dark theme. */
+
+.mosaic-blueprint-theme .drop-target-container .drop-target {
+  background: var(--drop-target) !important;
+}
+
+.mosaic .mosaic-preview {
+  background: var(--bg-dark) !important;
+  border: 1px dashed var(--border) !important;
+  opacity: 0.7;
+}
+
+/* Tab bar drop target (between tabs during reorder) */
+.mosaic .tab-drop-target {
+  width: 2px;
+  min-width: 2px;
+  align-self: stretch;
+  background: transparent;
+  transition: background 0.15s, width 0.15s;
+}
+
+.mosaic .tab-drop-target.tab-drop-target-hover {
+  background: var(--accent);
+  width: 3px;
+}
+
+/* Tab bar whole-bar drop highlight */
+.mosaic .mosaic-tab-bar.tab-bar-drop-target-hover {
+  background: var(--drop-target) !important;
+}
+
 /* Style mosaic's close button */
 .mosaic .mosaic-tab-close-button {
   background: none !important;
@@ -218,6 +250,16 @@ html, body, #root {
   cursor: pointer;
   opacity: 0;
   transition: opacity 0.1s;
+  position: relative;
+}
+
+/* Blueprint icon span is empty without BP CSS — render our own × */
+.mosaic .mosaic-tab-close-button .bp5-icon {
+  display: none;
+}
+
+.mosaic .mosaic-tab-close-button::after {
+  content: "\00D7"; /* × */
 }
 
 .mosaic .mosaic-tab-button:hover .mosaic-tab-close-button,
