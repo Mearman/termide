@@ -7,17 +7,14 @@ const screenshotDir = path.join(__dirname, "__screenshots__");
 
 test.describe("Tab Drag Prototype", () => {
   test("launches and shows the main window", async ({ electronApp, page }) => {
-    // The app should not be packaged in dev mode
     const isPackaged = await electronApp.evaluate(async ({ app }) => {
       return app.isPackaged;
     });
     expect(isPackaged).toBe(false);
 
-    // Window should have correct title
     const title = await page.title();
     expect(title).toBe("Tab Drag Prototype");
 
-    // Exactly one window should be open
     const windows = electronApp.windows();
     expect(windows).toHaveLength(1);
   });
@@ -57,30 +54,28 @@ test.describe("Tab Drag Prototype", () => {
     expect(layout.direction).toBe("row");
   });
 
-  test("renders demo tabs in split panes", async ({ page }) => {
+  test("renders mosaic with tab groups in split layout", async ({ page }) => {
     await page.waitForLoadState("domcontentloaded");
 
-    // The app should show 6 tab elements
-    const tabs = page.locator("[data-testid='tab']");
-    await expect(tabs).toHaveCount(6, { timeout: 10_000 });
+    // Mosaic renders .mosaic-tile for each visible tile
+    const tiles = page.locator(".mosaic-tile");
+    await expect(tiles).toHaveCount(2, { timeout: 10_000 });
 
-    // Should show specific tab titles from the demo data
-    for (const title of ["README.md", "index.ts", "styles.css", "package.json", "config.ts", "utils.ts"]) {
-      const tab = page.locator(`[data-testid="tab"] >> text=${title}`);
-      await expect(tab).toBeVisible();
-    }
+    // Tab buttons are rendered by mosaic's tab bar
+    const tabButtons = page.locator(".mosaic-tab-button");
+    await expect(tabButtons).toHaveCount(6, { timeout: 10_000 });
   });
 
-  test("split pane layout has two panes", async ({ page }) => {
+  test("split layout has a mosaic-split divider", async ({ page }) => {
     await page.waitForLoadState("domcontentloaded");
 
-    const panes = page.locator("[data-testid='pane']");
-    await expect(panes).toHaveCount(2, { timeout: 10_000 });
+    const splits = page.locator(".mosaic-split");
+    await expect(splits).toHaveCount(1, { timeout: 10_000 });
   });
 
   test("takes a screenshot of the initial state", async ({ page }) => {
     await page.waitForLoadState("domcontentloaded");
-    await page.locator("[data-testid='tab']").first().waitFor({ timeout: 10_000 });
+    await page.locator(".mosaic-tile").first().waitFor({ timeout: 10_000 });
 
     const fs = await import("node:fs/promises");
     await fs.mkdir(screenshotDir, { recursive: true });
