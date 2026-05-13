@@ -189,8 +189,8 @@ async function resolveCrossWindowDrop(
     const paneId = pane.dataset.paneId;
     if (paneId === undefined || paneId.length === 0) return undefined;
 
-    const content = element.closest(".pane-content");
-    if (content instanceof HTMLElement && pane.contains(content)) {
+    const content = pane.querySelector(".pane-content");
+    if (content instanceof HTMLElement) {
       const rect = content.getBoundingClientRect();
       const rx = (${JSON.stringify(clientX)} - rect.left) / rect.width;
       const ry = (${JSON.stringify(clientY)} - rect.top) / rect.height;
