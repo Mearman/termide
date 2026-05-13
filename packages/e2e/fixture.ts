@@ -89,7 +89,8 @@ function electronBinaryPath(): string {
  */
 export const test = base.extend<ElectronTestFixture & ViteFixture>({
   // Shared Vite server — created once per worker, reused across tests
-  viteServer: async (_fixtures, use) => {
+  // eslint-disable-next-line no-empty-pattern
+  viteServer: async ({}, use) => {
     const { server, url } = await startRenderer();
     await use({ server, url });
     await server.close();
