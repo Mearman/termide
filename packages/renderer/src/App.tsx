@@ -122,11 +122,12 @@ export function App(): React.ReactElement | null {
     };
   }, [dropOverlay]);
 
-  // Track which pane the cursor is over during a cross-window drag
+  // Track which pane the cursor is over during a cross-window drag.
+  // Cursor position comes from the main process via IPC as client-relative coords.
   useEffect(() => {
     if (!dropOverlay) return;
-    const handleMove = (ev: MouseEvent) => {
-      const element = document.elementFromPoint(ev.clientX, ev.clientY);
+    const handleCursor = (pos: { clientX: number; clientY: number }) => {
+      const element = document.elementFromPoint(pos.clientX, pos.clientY);
       if (!(element instanceof HTMLElement)) {
         setCrossWindowDropPreview(undefined);
         return;
@@ -143,11 +144,11 @@ export function App(): React.ReactElement | null {
         electron.dragTargetPane(paneId);
       }
 
-      const content = element.closest(".pane-content");
-      if (content instanceof HTMLElement && pane.contains(content)) {
+      const content = pane.querySelector(".pane-content");
+      if (content instanceof HTMLElement) {
         const rect = content.getBoundingClientRect();
-        const rx = (ev.clientX - rect.left) / rect.width;
-        const ry = (ev.clientY - rect.top) / rect.height;
+        const rx = (pos.clientX - rect.left) / rect.width;
+        const ry = (pos.clientY - rect.top) / rect.height;
         const distances = [
           { zone: "left" as const, distance: rx },
           { zone: "right" as const, distance: 1 - rx },
@@ -176,8 +177,8 @@ export function App(): React.ReactElement | null {
       const paneRect = pane.getBoundingClientRect();
       setCrossWindowDropPreview({ left: paneRect.left, top: paneRect.top, width: paneRect.width, height: paneRect.height, kind: "insert" });
     };
-    window.addEventListener("mousemove", handleMove);
-    return () => window.removeEventListener("mousemove", handleMove);
+    const unsub = electron.onDragCursor(handleCursor);
+    return () => { unsub(); };
   }, [dropOverlay]);
 
   useEffect(() => {

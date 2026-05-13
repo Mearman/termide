@@ -80,7 +80,6 @@ export function reportDragTargetEnter(windowId: number): void {
 }
 
 /**
- * A renderer reports that a drag left its window.
  * Called via drag-target-leave IPC from the renderer's dragleave handler.
  */
 export function reportDragTargetLeave(windowId: number): void {
@@ -388,7 +387,20 @@ function tick(): void {
   // Update ghost window position and visibility
   updateGhostWindow(cursor);
 
-  if (activeDrag.targetExplicit) return; // broadcast/test has priority
+  if (activeDrag.targetExplicit) {
+    // Send cursor updates to the current target even when polling is deferred
+    if (activeDrag.hoveredWindowId !== undefined) {
+      const targetWin = BrowserWindow.fromId(activeDrag.hoveredWindowId);
+      if (targetWin !== null && !targetWin.isDestroyed()) {
+        const bounds = targetWin.getContentBounds();
+        targetWin.webContents.send("drag-cursor", {
+          clientX: cursor.x - bounds.x,
+          clientY: cursor.y - bounds.y,
+        });
+      }
+    }
+    return;
+  }
 
   const newHoveredId = findWindowAtPoint(cursor, activeDrag.sourceWindowId);
 
@@ -405,10 +417,27 @@ function tick(): void {
       const newWin = BrowserWindow.fromId(newHoveredId);
       if (newWin !== null && !newWin.isDestroyed()) {
         newWin.webContents.send("drag-enter", { tabId: activeDrag.tabId });
+        const bounds = newWin.getContentBounds();
+        newWin.webContents.send("drag-cursor", {
+          clientX: cursor.x - bounds.x,
+          clientY: cursor.y - bounds.y,
+        });
       }
     }
 
     activeDrag.hoveredWindowId = newHoveredId;
+  }
+
+  // Send cursor position to current target (client-relative coords)
+  if (activeDrag.hoveredWindowId !== undefined) {
+    const hoverWin = BrowserWindow.fromId(activeDrag.hoveredWindowId);
+    if (hoverWin !== null && !hoverWin.isDestroyed()) {
+      const bounds = hoverWin.getContentBounds();
+      hoverWin.webContents.send("drag-cursor", {
+        clientX: cursor.x - bounds.x,
+        clientY: cursor.y - bounds.y,
+      });
+    }
   }
 }
 

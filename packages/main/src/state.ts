@@ -351,17 +351,23 @@ function removeTabFromLayout(node: LayoutNode, tabId: string): boolean {
   // SplitNode
   for (let i = 0; i < node.children.length; i++) {
     if (removeTabFromLayout(node.children[i], tabId)) {
-      // If child is now an empty pane, remove it
+      // Remove empty panes
       const child = node.children[i];
       if (child.type === "pane" && child.tabIds.length === 0) {
         node.children.splice(i, 1);
         node.sizes.splice(i, 1);
-        // Redistribute sizes evenly
-        const n = node.sizes.length;
-        if (n > 0) {
-          const each = FULL_PERCENT / n;
-          node.sizes = Array(n).fill(each);
-        }
+      }
+      // Redistribute or collapse
+      if (node.children.length === 0) {
+        // Edge case: all children removed
+      } else if (node.children.length === 1) {
+        // Collapse single-child split into its only child.
+        // Replace this node's fields in-place so parent references stay valid.
+        const only = node.children[0]!;
+        collapseNode(node, only);
+      } else {
+        const n = node.children.length;
+        node.sizes = Array(n).fill(FULL_PERCENT / n);
       }
       return true;
     }
@@ -426,6 +432,22 @@ function splitPaneWithTab(
 
 function paneId(pane: PaneNode): string {
   return pane.tabIds[0] ?? "__empty__";
+}
+
+/** Replace a LayoutNode's fields in-place with another's, preserving the reference. */
+function collapseNode(target: LayoutNode, source: LayoutNode): void {
+  const src = source as unknown as Record<string, unknown>;
+  const tgt = target as unknown as Record<string, unknown>;
+  // Remove fields that exist on target but not on source
+  for (const key of Object.keys(tgt)) {
+    if (!(key in src)) {
+      delete tgt[key];
+    }
+  }
+  // Copy all fields from source
+  for (const [key, value] of Object.entries(src)) {
+    tgt[key] = value;
+  }
 }
 
 function insertTabIntoLayout(

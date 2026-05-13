@@ -7,6 +7,7 @@ export interface ElectronAPI {
   onStateUpdated: (callback: (state: WindowStateFromMain) => void) => () => void;
   onDragEnter: (callback: (data: { tabId: string }) => void) => () => void;
   onDragLeave: (callback: () => void) => () => void;
+  onDragCursor: (callback: (pos: { clientX: number; clientY: number }) => void) => () => void;
   tabMovedIntra: (data: { windowId: number; layout: LayoutNode }) => void;
   toggleTabPin: (tabId: string) => void;
   /** Open a tab by title (preview model: replaces current preview, pins if already open). */

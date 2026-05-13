@@ -26,6 +26,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
     return () => ipcRenderer.removeListener("drag-leave", handler);
   },
 
+  onDragCursor: (callback) => {
+    const handler = (_event, data) => callback(data);
+    ipcRenderer.on("drag-cursor", handler);
+    return () => ipcRenderer.removeListener("drag-cursor", handler);
+  },
+
   tabMovedIntra: (data) => ipcRenderer.send("tab-moved-intra", data),
 
   toggleTabPin: (tabId) => ipcRenderer.send("toggle-tab-pin", tabId),
