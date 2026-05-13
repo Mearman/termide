@@ -11,6 +11,7 @@ import { createServer, type ViteDevServer, type InlineConfig } from "vite";
 import { execSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, "..", "..");
 const mainPackage = path.join(projectRoot, "packages", "main");
