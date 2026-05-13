@@ -3,7 +3,9 @@ import { test, expect } from "./fixture";
 const TAB_BUTTON = ".tab-button";
 
 test.describe("Split-on-drop", () => {
-  test("dragging a tab to the right edge of content area creates a row split", async ({ page }) => {
+  test("dragging a tab to the right edge of content area creates a row split", async ({
+    page,
+  }) => {
     await page.waitForLoadState("domcontentloaded");
     await page.locator(TAB_BUTTON).first().waitFor({ timeout: 10_000 });
 
@@ -17,14 +19,13 @@ test.describe("Split-on-drop", () => {
     const contentBox = await content.boundingBox();
     expect(contentBox).not.toBeNull();
 
-    // Drop at 90% x, 50% y (right edge, middle)
-    const targetX = contentBox!.x + contentBox!.width * 0.9;
-    const targetY = contentBox!.y + contentBox!.height * 0.5;
-
     const sourceTab = page.locator(TAB_BUTTON).first();
     await sourceTab.dragTo(content, {
       force: true,
-      targetPosition: { x: contentBox!.width * 0.9, y: contentBox!.height * 0.5 },
+      targetPosition: {
+        x: contentBox!.width * 0.9,
+        y: contentBox!.height * 0.5,
+      },
     });
 
     await page.waitForTimeout(500);
@@ -38,7 +39,9 @@ test.describe("Split-on-drop", () => {
     console.log("tab count after split:", tabCount);
 
     // Check layout via state
-    const layout = await page.evaluate(() => window.electronAPI.getInitialState());
+    const layout = await page.evaluate(() =>
+      window.electronAPI.getInitialState(),
+    );
     console.log("layout type:", layout.layout.type);
     if (layout.layout.type === "split") {
       console.log("direction:", layout.layout.direction);
@@ -46,7 +49,9 @@ test.describe("Split-on-drop", () => {
     }
   });
 
-  test("dragging a tab to the bottom edge creates a column split", async ({ page }) => {
+  test("dragging a tab to the bottom edge creates a column split", async ({
+    page,
+  }) => {
     await page.waitForLoadState("domcontentloaded");
     await page.locator(TAB_BUTTON).first().waitFor({ timeout: 10_000 });
 
@@ -57,12 +62,17 @@ test.describe("Split-on-drop", () => {
     const sourceTab = page.locator(TAB_BUTTON).first();
     await sourceTab.dragTo(content, {
       force: true,
-      targetPosition: { x: contentBox!.width * 0.5, y: contentBox!.height * 0.9 },
+      targetPosition: {
+        x: contentBox!.width * 0.5,
+        y: contentBox!.height * 0.9,
+      },
     });
 
     await page.waitForTimeout(500);
 
-    const layout = await page.evaluate(() => window.electronAPI.getInitialState());
+    const layout = await page.evaluate(() =>
+      window.electronAPI.getInitialState(),
+    );
     console.log("layout type:", layout.layout.type);
     if (layout.layout.type === "split") {
       console.log("direction:", layout.layout.direction);
@@ -72,11 +82,15 @@ test.describe("Split-on-drop", () => {
     console.log("pane count:", paneCount);
   });
 
-  test("ignores external tab IDs in renderer drop handlers", async ({ page }) => {
+  test("ignores external tab IDs in renderer drop handlers", async ({
+    page,
+  }) => {
     await page.waitForLoadState("domcontentloaded");
     await page.locator(TAB_BUTTON).first().waitFor({ timeout: 10_000 });
 
-    const before = await page.evaluate(() => window.electronAPI.getInitialState()?.layout);
+    const before = await page.evaluate(
+      () => window.electronAPI.getInitialState()?.layout,
+    );
 
     await page.evaluate(() => {
       const content = document.querySelector(".pane-content");
@@ -93,7 +107,9 @@ test.describe("Split-on-drop", () => {
       content.dispatchEvent(drop);
     });
 
-    const after = await page.evaluate(() => window.electronAPI.getInitialState()?.layout);
+    const after = await page.evaluate(
+      () => window.electronAPI.getInitialState()?.layout,
+    );
     expect(after).toEqual(before);
   });
 
@@ -118,13 +134,18 @@ test.describe("Split-on-drop", () => {
     const sourceTab = page.locator(TAB_BUTTON).first();
     await sourceTab.dragTo(content, {
       force: true,
-      targetPosition: { x: contentBox!.width * 0.9, y: contentBox!.height * 0.5 },
+      targetPosition: {
+        x: contentBox!.width * 0.9,
+        y: contentBox!.height * 0.5,
+      },
     });
 
     await page.waitForTimeout(500);
 
     // Should still be a single pane
-    const layout = await page.evaluate(() => window.electronAPI.getInitialState());
+    const layout = await page.evaluate(() =>
+      window.electronAPI.getInitialState(),
+    );
     expect(layout.layout.type).toBe("pane");
     await expect(page.locator(".pane")).toHaveCount(1);
   });

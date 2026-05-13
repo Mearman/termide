@@ -21,25 +21,34 @@ test.describe("Tab Drag Prototype", () => {
 
   test("window.electronAPI is available via preload", async ({ page }) => {
     const hasAPI = await page.evaluate(() => {
-      return typeof (window as unknown as Record<string, unknown>).electronAPI !== "undefined";
+      return (
+        typeof (window as unknown as Record<string, unknown>).electronAPI !==
+        "undefined"
+      );
     });
     expect(hasAPI).toBe(true);
   });
 
   test("IPC: get-window-id returns a positive integer", async ({ page }) => {
     const windowId = await page.evaluate(() => {
-      const api = (window as unknown as { electronAPI: { getWindowId(): number } }).electronAPI;
+      const api = (
+        window as unknown as { electronAPI: { getWindowId(): number } }
+      ).electronAPI;
       return api.getWindowId();
     });
     expect(typeof windowId).toBe("number");
     expect(windowId).toBeGreaterThan(0);
   });
 
-  test("IPC: get-initial-state returns window state with layout and tabs", async ({ page }) => {
+  test("IPC: get-initial-state returns window state with layout and tabs", async ({
+    page,
+  }) => {
     const state = await page.evaluate(() => {
-      const api = (window as unknown as {
-        electronAPI: { getInitialState(): unknown };
-      }).electronAPI;
+      const api = (
+        window as unknown as {
+          electronAPI: { getInitialState(): unknown };
+        }
+      ).electronAPI;
       return api.getInitialState();
     });
 
@@ -60,7 +69,7 @@ test.describe("Tab Drag Prototype", () => {
     const panes = page.locator(".pane");
     await expect(panes).toHaveCount(1, { timeout: 10_000 });
 
-    const tabButtons = page.locator('.tab-button');
+    const tabButtons = page.locator(".tab-button");
     await expect(tabButtons).toHaveCount(6, { timeout: 10_000 });
   });
 

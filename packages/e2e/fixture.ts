@@ -8,13 +8,9 @@ import { test as base, expect } from "@playwright/test";
 import { _electron as electron } from "@playwright/test";
 import type { ElectronApplication, Page } from "@playwright/test";
 import { createServer, type ViteDevServer, type InlineConfig } from "vite";
-import react from "@vitejs/plugin-react";
 import { execSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createRequire } from "node:module";
-
-const require = createRequire(import.meta.url);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, "..", "..");
 const mainPackage = path.join(projectRoot, "packages", "main");
@@ -47,7 +43,10 @@ function buildPreload(): void {
 /**
  * Start Vite dev server for the renderer on a random port.
  */
-async function startRenderer(): Promise<{ server: ViteDevServer; url: string }> {
+async function startRenderer(): Promise<{
+  server: ViteDevServer;
+  url: string;
+}> {
   const config: InlineConfig = {
     configFile: path.join(rendererPackage, "vite.config.ts"),
     root: rendererPackage,
@@ -72,7 +71,7 @@ async function startRenderer(): Promise<{ server: ViteDevServer; url: string }> 
 function electronBinaryPath(): string {
   const mainPkg = path.join(projectRoot, "packages", "main");
   const mainRequire = createRequire(path.join(mainPkg, "package.json"));
-  return mainRequire("electron") as unknown as string;
+  return mainRequire("electron");
 }
 
 /**
@@ -90,7 +89,7 @@ function electronBinaryPath(): string {
  */
 export const test = base.extend<ElectronTestFixture & ViteFixture>({
   // Shared Vite server — created once per worker, reused across tests
-  viteServer: async ({}, use) => {
+  viteServer: async (_fixtures, use) => {
     const { server, url } = await startRenderer();
     await use({ server, url });
     await server.close();
@@ -142,7 +141,10 @@ export const test = base.extend<ElectronTestFixture & ViteFixture>({
 /** Helper: convert the first window to a 2-pane split layout. */
 export async function setupSplitLayout(page: Page): Promise<void> {
   const windowId = await page.evaluate(() => window.electronAPI.getWindowId());
-  await page.evaluate((id) => window.electronAPI.testSetSplitLayout(id), windowId);
+  await page.evaluate(
+    (id) => window.electronAPI.testSetSplitLayout(id),
+    windowId,
+  );
   await page.waitForTimeout(500);
 }
 

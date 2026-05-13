@@ -3,18 +3,25 @@
  * Every mutation happens here; renderers receive snapshots.
  */
 import { BrowserWindow } from "electron";
-import type { AppState, LayoutNode, PaneNode, SplitNode, Tab } from "./types.ts";
+import type { AppState, LayoutNode, PaneNode, Tab } from "./types.ts";
 
 const FULL_PERCENT = 100;
 const EQUAL_SPLIT_PERCENT = FULL_PERCENT / 2;
 
 let nextTabId = 1;
 function makeTabId(): string {
-  return `tab-${nextTabId++}`;
+  return `tab-${String(nextTabId++)}`;
 }
 
 function makeTab(title: string, colour: string): Tab {
-  return { id: makeTabId(), title, colour, pinned: false, preview: false, dirty: false };
+  return {
+    id: makeTabId(),
+    title,
+    colour,
+    pinned: false,
+    preview: false,
+    dirty: false,
+  };
 }
 
 function makePane(...tabIds: string[]): PaneNode {
@@ -31,7 +38,10 @@ export const appState: AppState = {
   windows: {},
 };
 
-export function registerWindow(windowId: number, options?: { splitLayout?: boolean }): void {
+export function registerWindow(
+  windowId: number,
+  options?: { splitLayout?: boolean },
+): void {
   // Each window gets its own independent set of tabs with unique IDs.
   const windowTabs: Record<string, Tab> = {};
   const demoTabMeta = [
@@ -53,8 +63,16 @@ export function registerWindow(windowId: number, options?: { splitLayout?: boole
         direction: "row",
         sizes: [EQUAL_SPLIT_PERCENT, EQUAL_SPLIT_PERCENT],
         children: [
-          makePane(windowDemoTabs[0].id, windowDemoTabs[1].id, windowDemoTabs[2].id),
-          makePane(windowDemoTabs[3].id, windowDemoTabs[4].id, windowDemoTabs[5].id),
+          makePane(
+            windowDemoTabs[0].id,
+            windowDemoTabs[1].id,
+            windowDemoTabs[2].id,
+          ),
+          makePane(
+            windowDemoTabs[3].id,
+            windowDemoTabs[4].id,
+            windowDemoTabs[5].id,
+          ),
         ],
       }
     : makePane(
@@ -127,7 +145,12 @@ export function moveTabCrossWindow(
     }
   }
 
-  const inserted = insertTabIntoLayout(toState.layout, tabId, options.insertBeforeTabId, options.targetPaneId);
+  const inserted = insertTabIntoLayout(
+    toState.layout,
+    tabId,
+    options.insertBeforeTabId,
+    options.targetPaneId,
+  );
   if (!inserted && options.targetPaneId !== undefined) {
     insertTabIntoLayout(toState.layout, tabId, options.insertBeforeTabId);
   }
@@ -154,7 +177,12 @@ export function createWindowForTab(
 
   appState.windows[newWindowId] = {
     windowId: newWindowId,
-    layout: { type: "pane", tabIds: [tabId], pinnedTabIds: [], activeTabId: tabId },
+    layout: {
+      type: "pane",
+      tabIds: [tabId],
+      pinnedTabIds: [],
+      activeTabId: tabId,
+    },
     tabs: { [tabId]: tab },
   };
 }
@@ -253,7 +281,7 @@ export function openTabInWindow(windowId: number, title: string): void {
   // Check if the tab is already open (pinned or unpinned)
   for (const tabId of activePane.tabIds) {
     const tab = state.tabs[tabId];
-    if (tab !== undefined && tab.title === title) {
+    if (tab?.title === title) {
       // Already open — activate it and pin if preview
       if (tab.preview) {
         tab.preview = false;
@@ -270,7 +298,14 @@ export function openTabInWindow(windowId: number, title: string): void {
   }
 
   // Create a new preview tab
-  const colours = ["#4a90d9", "#7bc67e", "#d4a05a", "#c75d5d", "#9b6dbf", "#5db8a0"];
+  const colours = [
+    "#4a90d9",
+    "#7bc67e",
+    "#d4a05a",
+    "#c75d5d",
+    "#9b6dbf",
+    "#5db8a0",
+  ];
   const colour = colours[Math.floor(Math.random() * colours.length)];
   const newTab: Tab = {
     id: makeTabId(),
@@ -284,10 +319,10 @@ export function openTabInWindow(windowId: number, title: string): void {
 
   // Replace existing preview tab, or append after pinned tabs
   const existingPreviewIdx = activePane.tabIds.findIndex(
-    (id) => state.tabs[id]?.preview === true,
+    (id) => state.tabs[id]?.preview,
   );
   if (existingPreviewIdx !== -1) {
-    const oldId = activePane.tabIds[existingPreviewIdx]!;
+    const oldId = activePane.tabIds[existingPreviewIdx];
     delete state.tabs[oldId];
     activePane.tabIds[existingPreviewIdx] = newTab.id;
   } else {
@@ -315,7 +350,10 @@ function findActivePane(node: LayoutNode): PaneNode | undefined {
   return undefined;
 }
 
-function findPaneContainingTab(node: LayoutNode, tabId: string): PaneNode | undefined {
+function findPaneContainingTab(
+  node: LayoutNode,
+  tabId: string,
+): PaneNode | undefined {
   if (node.type === "pane") {
     return node.tabIds.includes(tabId) ? node : undefined;
   }
@@ -363,11 +401,11 @@ function removeTabFromLayout(node: LayoutNode, tabId: string): boolean {
       } else if (node.children.length === 1) {
         // Collapse single-child split into its only child.
         // Replace this node's fields in-place so parent references stay valid.
-        const only = node.children[0]!;
+        const only = node.children[0];
         collapseNode(node, only);
       } else {
         const n = node.children.length;
-        node.sizes = Array(n).fill(FULL_PERCENT / n);
+        node.sizes = Array.from<number>({ length: n }).fill(FULL_PERCENT / n);
       }
       return true;
     }
@@ -408,7 +446,9 @@ function splitPaneWithTab(
         const insertIndex = side === "before" ? i : i + 1;
         node.children.splice(insertIndex, 0, newPane);
         node.sizes.splice(insertIndex, 0, 0);
-        node.sizes = Array(node.children.length).fill(FULL_PERCENT / node.children.length);
+        node.sizes = Array.from<number>({ length: node.children.length }).fill(
+          FULL_PERCENT / node.children.length,
+        );
       } else {
         node.children[i] = {
           type: "split",
@@ -420,7 +460,13 @@ function splitPaneWithTab(
       return node;
     }
 
-    const replacement = splitPaneWithTab(child, targetPaneId, tabId, direction, side);
+    const replacement = splitPaneWithTab(
+      child,
+      targetPaneId,
+      tabId,
+      direction,
+      side,
+    );
     if (replacement !== undefined) {
       node.children[i] = replacement;
       return node;
@@ -435,6 +481,7 @@ function paneId(pane: PaneNode): string {
 }
 
 /** Replace a LayoutNode's fields in-place with another's, preserving the reference. */
+/* eslint-disable @typescript-eslint/consistent-type-assertions */
 function collapseNode(target: LayoutNode, source: LayoutNode): void {
   const src = source as unknown as Record<string, unknown>;
   const tgt = target as unknown as Record<string, unknown>;
@@ -449,6 +496,7 @@ function collapseNode(target: LayoutNode, source: LayoutNode): void {
     tgt[key] = value;
   }
 }
+/* eslint-enable @typescript-eslint/consistent-type-assertions */
 
 function insertTabIntoLayout(
   node: LayoutNode,
@@ -457,7 +505,8 @@ function insertTabIntoLayout(
   targetPaneId?: string,
 ): boolean {
   if (node.type === "pane") {
-    if (targetPaneId !== undefined && paneId(node) !== targetPaneId) return false;
+    if (targetPaneId !== undefined && paneId(node) !== targetPaneId)
+      return false;
     if (insertBeforeTabId !== undefined) {
       const idx = node.tabIds.indexOf(insertBeforeTabId);
       if (idx !== -1) {
@@ -474,7 +523,14 @@ function insertTabIntoLayout(
 
   // SplitNode
   for (let i = node.children.length - 1; i >= 0; i--) {
-    if (insertTabIntoLayout(node.children[i], tabId, insertBeforeTabId, targetPaneId)) {
+    if (
+      insertTabIntoLayout(
+        node.children[i],
+        tabId,
+        insertBeforeTabId,
+        targetPaneId,
+      )
+    ) {
       return true;
     }
   }

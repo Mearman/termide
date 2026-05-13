@@ -1,10 +1,9 @@
 import { test, expect, setupSplitLayout } from "./fixture";
 
 /** Selector for the draggable tab buttons in mosaic tab bars. */
-const TAB_BUTTON = '.tab-button';
+const TAB_BUTTON = ".tab-button";
 /** Selector for mosaic tab group containers. */
 const TABS_CONTAINER = ".pane";
-
 
 test.beforeEach(async ({ page }) => {
   await setupSplitLayout(page);
@@ -48,13 +47,14 @@ test.describe("Intra-window tab activation", () => {
   });
 });
 
-
 test.beforeEach(async ({ page }) => {
   await setupSplitLayout(page);
 });
 
 test.describe("Intra-window tab drag between panes", () => {
-  test("dragging a tab from left pane to right pane moves it", async ({ page }) => {
+  test("dragging a tab from left pane to right pane moves it", async ({
+    page,
+  }) => {
     await page.waitForLoadState("domcontentloaded");
     await page.locator(TAB_BUTTON).first().waitFor({ timeout: 10_000 });
 
@@ -98,13 +98,15 @@ test.describe("Intra-window tab drag between panes", () => {
     // The dragged tab should appear in the right pane
     const rightTabs = rightContainer.locator(TAB_BUTTON);
     await expect(rightTabs).toHaveCount(4);
-    const rightTitles = await rightTabs.evaluateAll(
-      (els) => els.map((e) => e.querySelector(".tab-title")?.textContent),
+    const rightTitles = await rightTabs.evaluateAll((els) =>
+      els.map((e) => e.querySelector(".tab-title")?.textContent),
     );
     expect(rightTitles.some((t) => t?.includes(sourceTitle ?? ""))).toBe(true);
   });
 
-  test("dragging tabs from one pane to another preserves all tabs", async ({ page }) => {
+  test("dragging tabs from one pane to another preserves all tabs", async ({
+    page,
+  }) => {
     await page.waitForLoadState("domcontentloaded");
     await page.locator(TAB_BUTTON).first().waitFor({ timeout: 10_000 });
 

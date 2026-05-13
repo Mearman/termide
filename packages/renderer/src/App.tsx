@@ -1,34 +1,49 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import type { LayoutNode, PaneNode, SplitNode, Tab, WindowStateFromMain } from "./types.ts";
+import type {
+  LayoutNode,
+  PaneNode,
+  SplitNode,
+  Tab,
+  WindowStateFromMain,
+} from "./types.ts";
 
 const electron = window.electronAPI;
 const SPLIT_EDGE_RATIO = 0.25;
 
-type CrossWindowDropPreview = {
+interface CrossWindowDropPreview {
   left: number;
   top: number;
   width: number;
   height: number;
   kind: "insert" | "split";
-};
+}
 
 // ─── Tree mutation helpers ────────────────────────────────
 
-function collectTabIds(node: LayoutNode): string[] {
-  if (node.type === "pane") return [...node.tabIds];
-  return node.children.flatMap(collectTabIds);
-}
-
 function cloneLayout(node: LayoutNode): LayoutNode {
   if (node.type === "pane") {
-    return { type: "pane", tabIds: [...node.tabIds], pinnedTabIds: [...node.pinnedTabIds], activeTabId: node.activeTabId };
+    return {
+      type: "pane",
+      tabIds: [...node.tabIds],
+      pinnedTabIds: [...node.pinnedTabIds],
+      activeTabId: node.activeTabId,
+    };
   }
-  return { type: "split", direction: node.direction, children: node.children.map(cloneLayout), sizes: [...node.sizes] };
+  return {
+    type: "split",
+    direction: node.direction,
+    children: node.children.map(cloneLayout),
+    sizes: [...node.sizes],
+  };
 }
 
 function findPane(node: LayoutNode, tabId: string): PaneNode | undefined {
-  if (node.type === "pane") return node.tabIds.includes(tabId) ? node : undefined;
-  for (const c of node.children) { const f = findPane(c, tabId); if (f) return f; }
+  if (node.type === "pane")
+    return node.tabIds.includes(tabId) ? node : undefined;
+  for (const c of node.children) {
+    const f = findPane(c, tabId);
+    if (f) return f;
+  }
   return undefined;
 }
 
@@ -37,18 +52,20 @@ function removeTab(layout: LayoutNode, tabId: string): boolean {
     const idx = layout.tabIds.indexOf(tabId);
     if (idx === -1) return false;
     layout.tabIds.splice(idx, 1);
-    layout.pinnedTabIds = layout.pinnedTabIds.filter(id => id !== tabId);
-    if (layout.activeTabId === tabId) layout.activeTabId = layout.tabIds[0] ?? "";
+    layout.pinnedTabIds = layout.pinnedTabIds.filter((id) => id !== tabId);
+    if (layout.activeTabId === tabId)
+      layout.activeTabId = layout.tabIds[0] ?? "";
     return true;
   }
   for (let i = 0; i < layout.children.length; i++) {
-    if (removeTab(layout.children[i]!, tabId)) {
-      const child = layout.children[i]!;
+    if (removeTab(layout.children[i], tabId)) {
+      const child = layout.children[i];
       if (child.type === "pane" && child.tabIds.length === 0) {
         layout.children.splice(i, 1);
         layout.sizes.splice(i, 1);
         const n = layout.sizes.length;
-        if (n > 0) layout.sizes = Array(n).fill(100 / n);
+        if (n > 0)
+          layout.sizes = Array.from<number>({ length: n }).fill(100 / n);
       }
       return true;
     }
@@ -60,7 +77,10 @@ function paneIdentity(pane: PaneNode): string {
   return pane.tabIds[0] ?? "__empty__";
 }
 
-function findParentOfPane(node: LayoutNode, paneId: string): SplitNode | undefined {
+function findParentOfPane(
+  node: LayoutNode,
+  paneId: string,
+): SplitNode | undefined {
   if (node.type === "pane") return undefined;
   for (const child of node.children) {
     if (child.type === "pane" && paneIdentity(child) === paneId) return node;
@@ -74,21 +94,30 @@ function findParentOfPane(node: LayoutNode, paneId: string): SplitNode | undefin
 
 export function App(): React.ReactElement | null {
   const [windowId, setWindowId] = useState(-1);
-  const [state, setState] = useState<WindowStateFromMain | undefined>(undefined);
+  const [state, setState] = useState<WindowStateFromMain | undefined>(
+    undefined,
+  );
   const [error, setError] = useState<string | undefined>(undefined);
-  const [contextMenu, setContextMenu] = useState<{ tabId: string; x: number; y: number } | undefined>(undefined);
+  const [contextMenu, setContextMenu] = useState<
+    { tabId: string; x: number; y: number } | undefined
+  >(undefined);
   const [dropOverlay, setDropOverlay] = useState(false);
-  const [crossWindowDropPreview, setCrossWindowDropPreview] = useState<CrossWindowDropPreview | undefined>(undefined);
+  const [crossWindowDropPreview, setCrossWindowDropPreview] = useState<
+    CrossWindowDropPreview | undefined
+  >(undefined);
 
   useEffect(() => {
-    if (electron === undefined) { setError("electronAPI not available"); return; }
+    if (electron === undefined) {
+      setError("electronAPI not available");
+      return;
+    }
     setWindowId(electron.getWindowId());
     const init = electron.getInitialState();
     if (init !== undefined) setState(init);
   }, []);
 
   useEffect(() => {
-    return electron.onStateUpdated(s => {
+    return electron.onStateUpdated((s) => {
       setState(s);
       setDropOverlay(false);
       setCrossWindowDropPreview(undefined);
@@ -96,12 +125,17 @@ export function App(): React.ReactElement | null {
   }, []);
 
   useEffect(() => {
-    const e = electron.onDragEnter(() => setDropOverlay(true));
+    const e = electron.onDragEnter(() => {
+      setDropOverlay(true);
+    });
     const l = electron.onDragLeave(() => {
       setDropOverlay(false);
       setCrossWindowDropPreview(undefined);
     });
-    return () => { e(); l(); };
+    return () => {
+      e();
+      l();
+    };
   }, []);
 
   useEffect(() => {
@@ -155,183 +189,262 @@ export function App(): React.ReactElement | null {
           { zone: "top" as const, distance: ry },
           { zone: "bottom" as const, distance: 1 - ry },
         ];
-        const closest = distances.reduce((a, b) => a.distance < b.distance ? a : b);
+        const closest = distances.reduce((a, b) =>
+          a.distance < b.distance ? a : b,
+        );
         if (closest.distance < SPLIT_EDGE_RATIO) {
           if (closest.zone === "left") {
-            setCrossWindowDropPreview({ left: rect.left, top: rect.top, width: rect.width * SPLIT_EDGE_RATIO, height: rect.height, kind: "split" });
+            setCrossWindowDropPreview({
+              left: rect.left,
+              top: rect.top,
+              width: rect.width * SPLIT_EDGE_RATIO,
+              height: rect.height,
+              kind: "split",
+            });
             return;
           }
           if (closest.zone === "right") {
-            setCrossWindowDropPreview({ left: rect.right - rect.width * SPLIT_EDGE_RATIO, top: rect.top, width: rect.width * SPLIT_EDGE_RATIO, height: rect.height, kind: "split" });
+            setCrossWindowDropPreview({
+              left: rect.right - rect.width * SPLIT_EDGE_RATIO,
+              top: rect.top,
+              width: rect.width * SPLIT_EDGE_RATIO,
+              height: rect.height,
+              kind: "split",
+            });
             return;
           }
           if (closest.zone === "top") {
-            setCrossWindowDropPreview({ left: rect.left, top: rect.top, width: rect.width, height: rect.height * SPLIT_EDGE_RATIO, kind: "split" });
+            setCrossWindowDropPreview({
+              left: rect.left,
+              top: rect.top,
+              width: rect.width,
+              height: rect.height * SPLIT_EDGE_RATIO,
+              kind: "split",
+            });
             return;
           }
-          setCrossWindowDropPreview({ left: rect.left, top: rect.bottom - rect.height * SPLIT_EDGE_RATIO, width: rect.width, height: rect.height * SPLIT_EDGE_RATIO, kind: "split" });
+          setCrossWindowDropPreview({
+            left: rect.left,
+            top: rect.bottom - rect.height * SPLIT_EDGE_RATIO,
+            width: rect.width,
+            height: rect.height * SPLIT_EDGE_RATIO,
+            kind: "split",
+          });
           return;
         }
       }
 
       const paneRect = pane.getBoundingClientRect();
-      setCrossWindowDropPreview({ left: paneRect.left, top: paneRect.top, width: paneRect.width, height: paneRect.height, kind: "insert" });
+      setCrossWindowDropPreview({
+        left: paneRect.left,
+        top: paneRect.top,
+        width: paneRect.width,
+        height: paneRect.height,
+        kind: "insert",
+      });
     };
     const unsub = electron.onDragCursor(handleCursor);
-    return () => { unsub(); };
+    return () => {
+      unsub();
+    };
   }, [dropOverlay]);
 
   useEffect(() => {
     if (contextMenu === undefined) return;
-    const h = () => setContextMenu(undefined);
+    const h = () => {
+      setContextMenu(undefined);
+    };
     window.addEventListener("click", h);
-    return () => window.removeEventListener("click", h);
+    return () => {
+      window.removeEventListener("click", h);
+    };
   }, [contextMenu]);
 
-  const syncLayout = useCallback((layout: LayoutNode, tabs?: Record<string, Tab>) => {
-    if (state === undefined) return;
-    const t = tabs ?? state.tabs;
-    setState({ ...state, layout, tabs: t });
-    electron.tabMovedIntra({ windowId, layout });
-  }, [state, windowId]);
+  const syncLayout = useCallback(
+    (layout: LayoutNode, tabs?: Record<string, Tab>) => {
+      if (state === undefined) return;
+      const t = tabs ?? state.tabs;
+      setState({ ...state, layout, tabs: t });
+      electron.tabMovedIntra({ windowId, layout });
+    },
+    [state, windowId],
+  );
 
-  const handleTabClick = useCallback((paneId: string, tabId: string) => {
-    if (state === undefined) return;
-    const layout = cloneLayout(state.layout);
-    const p = findPane(layout, tabId);
-    if (p === undefined || p.activeTabId === tabId) return;
-    p.activeTabId = tabId;
-    syncLayout(layout);
-  }, [state, syncLayout]);
-
-  const handleCloseTab = useCallback((tabId: string) => {
-    if (state === undefined) return;
-    const layout = cloneLayout(state.layout);
-    removeTab(layout, tabId);
-    const tabs = { ...state.tabs };
-    delete tabs[tabId];
-    syncLayout(layout, tabs);
-  }, [state, syncLayout]);
-
-  const handleResize = useCallback((splitPath: number[], sizes: number[]) => {
-    if (state === undefined) return;
-    const layout = cloneLayout(state.layout);
-    let node: LayoutNode = layout;
-    for (const idx of splitPath) {
-      if (node.type === "pane") return;
-      node = node.children[idx]!;
-    }
-    if (node.type === "split") {
-      node.sizes = sizes;
+  const handleTabClick = useCallback(
+    (paneId: string, tabId: string) => {
+      if (state === undefined) return;
+      const layout = cloneLayout(state.layout);
+      const p = findPane(layout, tabId);
+      if (p === undefined || p.activeTabId === tabId) return;
+      p.activeTabId = tabId;
       syncLayout(layout);
-    }
-  }, [state, syncLayout]);
+    },
+    [state, syncLayout],
+  );
+
+  const handleCloseTab = useCallback(
+    (tabId: string) => {
+      if (state === undefined) return;
+      const layout = cloneLayout(state.layout);
+      removeTab(layout, tabId);
+      const tabs = { ...state.tabs };
+      const { [tabId]: _removed, ...remainingTabs } = tabs;
+      syncLayout(layout, remainingTabs);
+    },
+    [state, syncLayout],
+  );
+
+  const handleResize = useCallback(
+    (splitPath: number[], sizes: number[]) => {
+      if (state === undefined) return;
+      const layout = cloneLayout(state.layout);
+      let node: LayoutNode = layout;
+      for (const idx of splitPath) {
+        if (node.type === "pane") return;
+        const child = node.children[idx];
+        if (child === undefined) return;
+        node = child;
+      }
+      if (node.type === "split") {
+        node.sizes = sizes;
+        syncLayout(layout);
+      }
+    },
+    [state, syncLayout],
+  );
 
   const [draggedTabId, setDraggedTabId] = useState<string | null>(null);
 
-  const handleTabDragStart = useCallback((e: React.DragEvent, tabId: string) => {
-    setDraggedTabId(tabId);
-    e.dataTransfer.setData("application/tab-id", tabId);
-    e.dataTransfer.effectAllowed = "move";
-    const tab = state?.tabs[tabId];
-    if (tab !== undefined) {
-      electron.tabDragBegin({ windowId, tabId, tabTitle: tab.title, tabColour: tab.colour, tabBounds: { x: 0, y: 0, width: 0, height: 0 } });
-    }
-  }, [state, windowId]);
+  const handleTabDragStart = useCallback(
+    (e: React.DragEvent, tabId: string) => {
+      setDraggedTabId(tabId);
+      e.dataTransfer.setData("application/tab-id", tabId);
+      e.dataTransfer.effectAllowed = "move";
+      const tab = state?.tabs[tabId];
+      if (tab !== undefined) {
+        electron.tabDragBegin({
+          windowId,
+          tabId,
+          tabTitle: tab.title,
+          tabColour: tab.colour,
+          tabBounds: { x: 0, y: 0, width: 0, height: 0 },
+        });
+      }
+    },
+    [state, windowId],
+  );
 
   const handleTabDragEnd = useCallback((e: React.DragEvent) => {
     setDraggedTabId(null);
     electron.tabDragEnd(e.dataTransfer.dropEffect === "none");
   }, []);
 
-  const handlePaneDrop = useCallback((targetPaneId: string, tabId: string, insertIndex: number) => {
-    if (state === undefined) return;
-    if (state.tabs[tabId] === undefined) return;
-    const sourcePane = findPane(state.layout, tabId);
-    if (sourcePane === undefined) return;
-    const sourcePaneId = paneIdentity(sourcePane);
-    const layout = cloneLayout(state.layout);
+  const handlePaneDrop = useCallback(
+    (targetPaneId: string, tabId: string, insertIndex: number) => {
+      if (state === undefined) return;
+      if (state.tabs[tabId] === undefined) return;
+      const sourcePane = findPane(state.layout, tabId);
+      if (sourcePane === undefined) return;
+      const sourcePaneId = paneIdentity(sourcePane);
+      const layout = cloneLayout(state.layout);
 
-    if (sourcePaneId === targetPaneId) {
-      // Reorder within same pane
-      const p = findPane(layout, tabId);
-      if (p === undefined) return;
-      const fromIdx = p.tabIds.indexOf(tabId);
-      if (fromIdx === -1) return;
-      p.tabIds.splice(fromIdx, 1);
-      const adjustedIdx = fromIdx < insertIndex ? insertIndex - 1 : insertIndex;
-      p.tabIds.splice(adjustedIdx, 0, tabId);
-    } else {
-      // Move between panes
-      removeTab(layout, tabId);
-      // Find target pane by identity
-      const target = findPaneByIdentity(layout, targetPaneId);
-      if (target !== undefined) {
-        target.tabIds.splice(insertIndex, 0, tabId);
-        target.activeTabId = tabId;
-      }
-    }
-    syncLayout(layout);
-  }, [state, syncLayout]);
-
-  const handleOpenTab = useCallback((title: string) => { electron.openTab(title); }, []);
-  const handleTogglePin = useCallback((tabId: string) => { electron.toggleTabPin(tabId); }, []);
-
-  const handleSplitPane = useCallback((targetPaneId: string, tabId: string, direction: "row" | "column", side: "before" | "after") => {
-    if (state === undefined) return;
-    if (state.tabs[tabId] === undefined) return;
-    const layout = cloneLayout(state.layout);
-    removeTab(layout, tabId);
-
-    // Create a new pane for the dragged tab
-    const newPane: PaneNode = {
-      type: "pane",
-      tabIds: [tabId],
-      pinnedTabIds: [],
-      activeTabId: tabId,
-    };
-
-    // Find the target pane and wrap it in a split
-    const parent = findParentOfPane(layout, targetPaneId);
-    if (parent === undefined) {
-      // Target is the root pane — replace root with a split
-      const root = layout as PaneNode;
-      const newLayout: SplitNode = {
-        type: "split",
-        direction,
-        sizes: [50, 50],
-        children: side === "before" ? [newPane, root] : [root, newPane],
-      };
-      syncLayout(newLayout);
-    } else {
-      // Insert into parent's children at the right position
-      const targetIdx = parent.children.findIndex(c => {
-        if (c.type === "pane") return paneIdentity(c) === targetPaneId;
-        return false;
-      });
-      const insertIdx = side === "before" ? targetIdx : targetIdx + 1;
-
-      if (parent.direction === direction) {
-        // Same direction — just insert alongside
-        parent.children.splice(insertIdx, 0, newPane);
-        parent.sizes.splice(insertIdx, 0, 0);
-        // Redistribute
-        const n = parent.sizes.length;
-        parent.sizes = Array(n).fill(100 / n);
+      if (sourcePaneId === targetPaneId) {
+        // Reorder within same pane
+        const p = findPane(layout, tabId);
+        if (p === undefined) return;
+        const fromIdx = p.tabIds.indexOf(tabId);
+        if (fromIdx === -1) return;
+        p.tabIds.splice(fromIdx, 1);
+        const adjustedIdx =
+          fromIdx < insertIndex ? insertIndex - 1 : insertIndex;
+        p.tabIds.splice(adjustedIdx, 0, tabId);
       } else {
-        // Different direction — wrap the target pane in a new split
-        const targetChild = parent.children[targetIdx]! as PaneNode;
-        const innerSplit: SplitNode = {
+        // Move between panes
+        removeTab(layout, tabId);
+        // Find target pane by identity
+        const target = findPaneByIdentity(layout, targetPaneId);
+        if (target !== undefined) {
+          target.tabIds.splice(insertIndex, 0, tabId);
+          target.activeTabId = tabId;
+        }
+      }
+      syncLayout(layout);
+    },
+    [state, syncLayout],
+  );
+
+  const handleOpenTab = useCallback((title: string) => {
+    electron.openTab(title);
+  }, []);
+
+  const handleSplitPane = useCallback(
+    (
+      targetPaneId: string,
+      tabId: string,
+      direction: "row" | "column",
+      side: "before" | "after",
+    ) => {
+      if (state === undefined) return;
+      if (state.tabs[tabId] === undefined) return;
+      const layout = cloneLayout(state.layout);
+      removeTab(layout, tabId);
+
+      // Create a new pane for the dragged tab
+      const newPane: PaneNode = {
+        type: "pane",
+        tabIds: [tabId],
+        pinnedTabIds: [],
+        activeTabId: tabId,
+      };
+
+      // Find the target pane and wrap it in a split
+      const parent = findParentOfPane(layout, targetPaneId);
+      if (parent === undefined) {
+        // Target is the root pane — replace root with a split
+        if (layout.type !== "pane") return;
+        const root = layout;
+        const newLayout: SplitNode = {
           type: "split",
           direction,
           sizes: [50, 50],
-          children: side === "before" ? [newPane, targetChild] : [targetChild, newPane],
+          children: side === "before" ? [newPane, root] : [root, newPane],
         };
-        parent.children[targetIdx] = innerSplit;
+        syncLayout(newLayout);
+      } else {
+        // Insert into parent's children at the right position
+        const targetIdx = parent.children.findIndex((c) => {
+          if (c.type === "pane") return paneIdentity(c) === targetPaneId;
+          return false;
+        });
+        const insertIdx = side === "before" ? targetIdx : targetIdx + 1;
+
+        if (parent.direction === direction) {
+          // Same direction — just insert alongside
+          parent.children.splice(insertIdx, 0, newPane);
+          parent.sizes.splice(insertIdx, 0, 0);
+          // Redistribute
+          const n = parent.sizes.length;
+          parent.sizes = Array.from<number>({ length: n }).fill(100 / n);
+        } else {
+          // Different direction — wrap the target pane in a new split
+          const targetChild = parent.children[targetIdx];
+          if (targetChild?.type !== "pane") return;
+          const innerSplit: SplitNode = {
+            type: "split",
+            direction,
+            sizes: [50, 50],
+            children:
+              side === "before"
+                ? [newPane, targetChild]
+                : [targetChild, newPane],
+          };
+          parent.children[targetIdx] = innerSplit;
+        }
+        syncLayout(layout);
       }
-      syncLayout(layout);
-    }
-  }, [state, syncLayout]);
+    },
+    [state, syncLayout],
+  );
 
   if (error !== undefined) return <div className="error">{error}</div>;
   if (state === undefined) return <div className="loading">Loading…</div>;
@@ -350,7 +463,9 @@ export function App(): React.ReactElement | null {
         onPaneDrop={handlePaneDrop}
         onSplitPane={handleSplitPane}
         onOpenTab={handleOpenTab}
-        onContextMenu={(tabId, x, y) => setContextMenu({ tabId, x, y })}
+        onContextMenu={(tabId, x, y) => {
+          setContextMenu({ tabId, x, y });
+        }}
         draggedTabId={draggedTabId}
       />
       {dropOverlay && crossWindowDropPreview !== undefined && (
@@ -365,11 +480,29 @@ export function App(): React.ReactElement | null {
         />
       )}
       {contextMenu !== undefined && (
-        <div className="context-menu" style={{ left: contextMenu.x, top: contextMenu.y }} onClick={e => e.stopPropagation()}>
-          <button className="context-item" onClick={() => { electron.toggleTabPin(contextMenu.tabId); setContextMenu(undefined); }}>
+        <div
+          className="context-menu"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={(e) => {
+            e.stopPropagation();
+          }}
+        >
+          <button
+            className="context-item"
+            onClick={() => {
+              electron.toggleTabPin(contextMenu.tabId);
+              setContextMenu(undefined);
+            }}
+          >
             {state.tabs[contextMenu.tabId]?.pinned ? "Unpin" : "Pin"}
           </button>
-          <button className="context-item" onClick={() => { handleCloseTab(contextMenu.tabId); setContextMenu(undefined); }}>
+          <button
+            className="context-item"
+            onClick={() => {
+              handleCloseTab(contextMenu.tabId);
+              setContextMenu(undefined);
+            }}
+          >
             Close
           </button>
         </div>
@@ -386,8 +519,17 @@ interface Callbacks {
   onResize: (splitPath: number[], sizes: number[]) => void;
   onTabDragStart: (e: React.DragEvent, tabId: string) => void;
   onTabDragEnd: (e: React.DragEvent) => void;
-  onPaneDrop: (targetPaneId: string, tabId: string, insertIndex: number) => void;
-  onSplitPane: (targetPaneId: string, tabId: string, direction: "row" | "column", side: "before" | "after") => void;
+  onPaneDrop: (
+    targetPaneId: string,
+    tabId: string,
+    insertIndex: number,
+  ) => void;
+  onSplitPane: (
+    targetPaneId: string,
+    tabId: string,
+    direction: "row" | "column",
+    side: "before" | "after",
+  ) => void;
   onOpenTab: (title: string) => void;
   onContextMenu: (tabId: string, x: number, y: number) => void;
   draggedTabId: string | null;
@@ -395,62 +537,72 @@ interface Callbacks {
 
 // ─── Recursive layout ─────────────────────────────────────
 
-function SplitOrPane(props: {
-  node: LayoutNode;
-  tabs: Record<string, Tab>;
-  splitPath: number[];
-} & Callbacks): React.ReactElement {
+function SplitOrPane(
+  props: {
+    node: LayoutNode;
+    tabs: Record<string, Tab>;
+    splitPath: number[];
+  } & Callbacks,
+): React.ReactElement {
   if (props.node.type === "pane") return <Pane {...props} pane={props.node} />;
   return <Split {...props} split={props.node} />;
 }
 
 // ─── Split ────────────────────────────────────────────────
 
-function Split(props: {
-  split: SplitNode;
-  tabs: Record<string, Tab>;
-  splitPath: number[];
-} & Callbacks): React.ReactElement {
+function Split(
+  props: {
+    split: SplitNode;
+    tabs: Record<string, Tab>;
+    splitPath: number[];
+  } & Callbacks,
+): React.ReactElement {
   const containerRef = useRef<HTMLDivElement>(null);
   const [dragIdx, setDragIdx] = useState(-1);
   const sizesRef = useRef([...props.split.sizes]);
 
-  const handleMouseDown = useCallback((index: number, e: React.MouseEvent) => {
-    e.preventDefault();
-    setDragIdx(index);
-    sizesRef.current = [...props.split.sizes];
-    const startPos = props.split.direction === "row" ? e.clientX : e.clientY;
+  const handleMouseDown = useCallback(
+    (index: number, e: React.MouseEvent) => {
+      e.preventDefault();
+      setDragIdx(index);
+      sizesRef.current = [...props.split.sizes];
+      const startPos = props.split.direction === "row" ? e.clientX : e.clientY;
 
-    const onMove = (ev: MouseEvent) => {
-      const container = containerRef.current;
-      if (container === null) return;
-      const rect = container.getBoundingClientRect();
-      const totalPx = props.split.direction === "row" ? rect.width : rect.height;
-      const deltaPx = (props.split.direction === "row" ? ev.clientX : ev.clientY) - startPos;
-      const deltaPct = (deltaPx / totalPx) * 100;
+      const onMove = (ev: MouseEvent) => {
+        const container = containerRef.current;
+        if (container === null) return;
+        const rect = container.getBoundingClientRect();
+        const totalPx =
+          props.split.direction === "row" ? rect.width : rect.height;
+        const deltaPx =
+          (props.split.direction === "row" ? ev.clientX : ev.clientY) -
+          startPos;
+        const deltaPct = (deltaPx / totalPx) * 100;
 
-      const sizes = [...sizesRef.current];
-      const left = sizes[index]! + deltaPct;
-      const right = sizes[index + 1]! - deltaPct;
-      if (left < 5 || right < 5) return;
-      sizes[index] = left;
-      sizes[index + 1] = right;
-      // Re-normalise
-      const sum = sizes.reduce((a, b) => a + b, 0);
-      sizesRef.current = sizes.map(s => (s / sum) * 100);
-      setDragIdx(index); // trigger re-render
-    };
+        const sizes = [...sizesRef.current];
+        const left = sizes[index] + deltaPct;
+        const right = sizes[index + 1] - deltaPct;
+        if (left < 5 || right < 5) return;
+        sizes[index] = left;
+        sizes[index + 1] = right;
+        // Re-normalise
+        const sum = sizes.reduce((a, b) => a + b, 0);
+        sizesRef.current = sizes.map((s) => (s / sum) * 100);
+        setDragIdx(index); // trigger re-render
+      };
 
-    const onUp = () => {
-      props.onResize(props.splitPath, sizesRef.current);
-      setDragIdx(-1);
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
-    };
+      const onUp = () => {
+        props.onResize(props.splitPath, sizesRef.current);
+        setDragIdx(-1);
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+      };
 
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", onUp);
-  }, [props]);
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    },
+    [props],
+  );
 
   const dir = props.split.direction === "row" ? "row" : "column";
   const currentSizes = dragIdx >= 0 ? sizesRef.current : props.split.sizes;
@@ -459,7 +611,10 @@ function Split(props: {
     <div ref={containerRef} className={`split split-${dir}`}>
       {props.split.children.map((child, i) => (
         <React.Fragment key={i}>
-          <div className="split-child" style={{ flexBasis: `${currentSizes[i]}%` }}>
+          <div
+            className="split-child"
+            style={{ flexBasis: `${String(currentSizes[i])}%` }}
+          >
             <SplitOrPane
               node={child}
               tabs={props.tabs}
@@ -477,7 +632,12 @@ function Split(props: {
             />
           </div>
           {i < props.split.children.length - 1 && (
-            <div className={`resize-handle resize-${dir}`} onMouseDown={e => handleMouseDown(i, e)} />
+            <div
+              className={`resize-handle resize-${dir}`}
+              onMouseDown={(e) => {
+                handleMouseDown(i, e);
+              }}
+            />
           )}
         </React.Fragment>
       ))}
@@ -487,28 +647,52 @@ function Split(props: {
 
 // ─── Pane (tab bar + content) ─────────────────────────────
 
-function findPaneByIdentity(node: LayoutNode, paneId: string): PaneNode | undefined {
-  if (node.type === "pane") return paneIdentity(node) === paneId ? node : undefined;
-  for (const c of node.children) { const f = findPaneByIdentity(c, paneId); if (f) return f; }
+function findPaneByIdentity(
+  node: LayoutNode,
+  paneId: string,
+): PaneNode | undefined {
+  if (node.type === "pane")
+    return paneIdentity(node) === paneId ? node : undefined;
+  for (const c of node.children) {
+    const f = findPaneByIdentity(c, paneId);
+    if (f) return f;
+  }
   return undefined;
 }
 
-const NEW_TITLES = ["new-file.ts", "untitled.txt", "scratch.md", "notes.json", "config.yaml", "test.spec.ts"];
+const NEW_TITLES = [
+  "new-file.ts",
+  "untitled.txt",
+  "scratch.md",
+  "notes.json",
+  "config.yaml",
+  "test.spec.ts",
+];
 
-function Pane(props: {
-  pane: PaneNode;
-  tabs: Record<string, Tab>;
-} & Callbacks): React.ReactElement {
+function Pane(
+  props: {
+    pane: PaneNode;
+    tabs: Record<string, Tab>;
+  } & Callbacks,
+): React.ReactElement {
   const { pane, tabs } = props;
   const pid = paneIdentity(pane);
-  const isOnlyTabInPane = props.draggedTabId !== null && pane.tabIds.length === 1 && pane.tabIds.includes(props.draggedTabId);
+  const isOnlyTabInPane =
+    props.draggedTabId !== null &&
+    pane.tabIds.length === 1 &&
+    pane.tabIds.includes(props.draggedTabId);
   const insertRef = useRef(-1);
   const [dragOver, setDragOver] = useState(false);
   const [insertIdx, setInsertIdx] = useState(-1);
-  const [splitZone, setSplitZone] = useState<"left" | "right" | "top" | "bottom" | null>(null);
+  const [splitZone, setSplitZone] = useState<
+    "left" | "right" | "top" | "bottom" | null
+  >(null);
 
-
-  const computeSplitZone = (el: HTMLElement, clientX: number, clientY: number): "left" | "right" | "top" | "bottom" | null => {
+  const computeSplitZone = (
+    el: HTMLElement,
+    clientX: number,
+    clientY: number,
+  ): "left" | "right" | "top" | "bottom" | null => {
     const rect = el.getBoundingClientRect();
     const rx = (clientX - rect.left) / rect.width;
     const ry = (clientY - rect.top) / rect.height;
@@ -519,7 +703,7 @@ function Pane(props: {
       { zone: "top" as const, d: ry },
       { zone: "bottom" as const, d: 1 - ry },
     ];
-    const closest = dists.reduce((a, b) => a.d < b.d ? a : b);
+    const closest = dists.reduce((a, b) => (a.d < b.d ? a : b));
     return closest.d < SPLIT_EDGE_RATIO ? closest.zone : null;
   };
 
@@ -528,7 +712,7 @@ function Pane(props: {
     const barRect = barEl.getBoundingClientRect();
     const x = clientX - barRect.left;
     for (let i = 0; i < buttons.length; i++) {
-      const btnRect = buttons[i]!.getBoundingClientRect();
+      const btnRect = buttons[i].getBoundingClientRect();
       if (x < btnRect.left - barRect.left + btnRect.width / 2) return i;
     }
     return buttons.length;
@@ -538,7 +722,7 @@ function Pane(props: {
     <div className="pane" data-pane-id={pid}>
       <div
         className={`tab-bar${dragOver ? " drag-over" : ""}`}
-        onDragOver={e => {
+        onDragOver={(e) => {
           if (props.draggedTabId === null) return;
           if (!e.dataTransfer.types.includes("application/tab-id")) return;
           e.preventDefault();
@@ -549,19 +733,25 @@ function Pane(props: {
           setInsertIdx(idx);
           setSplitZone(null);
         }}
-        onDragLeave={e => {
+        onDragLeave={(e) => {
+          // relatedTarget is EventTarget | null but in practice always a Node.
+          // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
           if (!e.currentTarget.contains(e.relatedTarget as Node)) {
             setDragOver(false);
             setInsertIdx(-1);
           }
         }}
-        onDrop={e => {
+        onDrop={(e) => {
           setDragOver(false);
           setInsertIdx(-1);
           const tabId = e.dataTransfer.getData("application/tab-id");
           if (tabId === "" || tabs[tabId] === undefined) return;
           e.preventDefault();
-          props.onPaneDrop(pid, tabId, insertRef.current >= 0 ? insertRef.current : pane.tabIds.length);
+          props.onPaneDrop(
+            pid,
+            tabId,
+            insertRef.current >= 0 ? insertRef.current : pane.tabIds.length,
+          );
           insertRef.current = -1;
         }}
       >
@@ -570,49 +760,92 @@ function Pane(props: {
           const active = tabId === pane.activeTabId;
           return (
             <React.Fragment key={tabId}>
-              {dragOver && insertIdx === i && <div className="tab-insert-indicator" />}
+              {dragOver && insertIdx === i && (
+                <div className="tab-insert-indicator" />
+              )}
               <button
                 className={`tab-button${active ? " active" : ""}${tab?.pinned ? " pinned" : ""}`}
                 draggable
-                onClick={() => props.onTabClick(pid, tabId)}
-                onDragStart={e => props.onTabDragStart(e, tabId)}
-                onDragEnd={e => props.onTabDragEnd(e)}
-                onContextMenu={e => { e.preventDefault(); props.onContextMenu(tabId, e.clientX, e.clientY); }}
-                onAuxClick={e => { if (e.button === 1) { e.preventDefault(); props.onCloseTab(tabId); } }}
+                onClick={() => {
+                  props.onTabClick(pid, tabId);
+                }}
+                onDragStart={(e) => {
+                  props.onTabDragStart(e, tabId);
+                }}
+                onDragEnd={(e) => {
+                  props.onTabDragEnd(e);
+                }}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  props.onContextMenu(tabId, e.clientX, e.clientY);
+                }}
+                onAuxClick={(e) => {
+                  if (e.button === 1) {
+                    e.preventDefault();
+                    props.onCloseTab(tabId);
+                  }
+                }}
               >
-                <span className="tab-dot" style={{ background: tab?.colour ?? "#888" }} />
+                <span
+                  className="tab-dot"
+                  style={{ background: tab?.colour ?? "#888" }}
+                />
                 <span className="tab-title">{tab?.title ?? tabId}</span>
                 {tab?.pinned && <span className="tab-badge">📌</span>}
-                {tab?.preview && <span className="tab-badge preview">preview</span>}
+                {tab?.preview && (
+                  <span className="tab-badge preview">preview</span>
+                )}
                 {tab?.dirty && <span className="tab-badge dirty">●</span>}
-                <span className="tab-close" onClick={e => { e.stopPropagation(); props.onCloseTab(tabId); }}>
+                <span
+                  className="tab-close"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    props.onCloseTab(tabId);
+                  }}
+                >
                   {tab?.dirty ? "●" : "×"}
                 </span>
               </button>
             </React.Fragment>
           );
         })}
-        {dragOver && insertIdx >= pane.tabIds.length && <div className="tab-insert-indicator" />}
-        <button className="tab-add" onClick={() => props.onOpenTab(NEW_TITLES[Math.floor(Math.random() * NEW_TITLES.length)])}>+</button>
+        {dragOver && insertIdx >= pane.tabIds.length && (
+          <div className="tab-insert-indicator" />
+        )}
+        <button
+          className="tab-add"
+          onClick={() => {
+            props.onOpenTab(
+              NEW_TITLES[Math.floor(Math.random() * NEW_TITLES.length)],
+            );
+          }}
+        >
+          +
+        </button>
       </div>
       <div
         className="pane-content"
-        onDragOver={e => {
+        onDragOver={(e) => {
           if (props.draggedTabId === null) return;
           if (!e.dataTransfer.types.includes("application/tab-id")) return;
           e.preventDefault();
           e.dataTransfer.dropEffect = "move";
           setDragOver(false);
           setInsertIdx(-1);
-          if (isOnlyTabInPane) { setSplitZone(null); return; }
+          if (isOnlyTabInPane) {
+            setSplitZone(null);
+            return;
+          }
           setSplitZone(computeSplitZone(e.currentTarget, e.clientX, e.clientY));
         }}
-        onDragLeave={e => {
+        onDragLeave={(e) => {
+          // relatedTarget is EventTarget | null but in practice always a Node.
+          // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
           if (!e.currentTarget.contains(e.relatedTarget as Node)) {
             setSplitZone(null);
           }
         }}
-        onDrop={e => {
+        onDrop={(e) => {
           const tabId = e.dataTransfer.getData("application/tab-id");
           if (tabId === "" || tabs[tabId] === undefined) return;
           e.preventDefault();
@@ -621,13 +854,14 @@ function Pane(props: {
           if (isOnlyTabInPane) return;
           const zone = computeSplitZone(e.currentTarget, e.clientX, e.clientY);
           if (zone === null) return;
-          const dirMap: Record<string, ["row" | "column", "before" | "after"]> = {
-            left: ["row", "before"],
-            right: ["row", "after"],
-            top: ["column", "before"],
-            bottom: ["column", "after"],
-          };
-          const [direction, side] = dirMap[zone]!;
+          const dirMap: Record<string, ["row" | "column", "before" | "after"]> =
+            {
+              left: ["row", "before"],
+              right: ["row", "after"],
+              top: ["column", "before"],
+              bottom: ["column", "after"],
+            };
+          const [direction, side] = dirMap[zone];
           props.onSplitPane(pid, tabId, direction, side);
         }}
       >
@@ -640,8 +874,15 @@ function Pane(props: {
   );
 }
 
-function ContentArea({ tab, tabId }: { tab: Tab | undefined; tabId: string }): React.ReactElement {
-  if (tab === undefined) return <div className="content-empty">No tab open</div>;
+function ContentArea({
+  tab,
+  tabId,
+}: {
+  tab: Tab | undefined;
+  tabId: string;
+}): React.ReactElement {
+  if (tab === undefined)
+    return <div className="content-empty">No tab open</div>;
   return (
     <div className="content-header">
       <span className="content-dot" style={{ backgroundColor: tab.colour }} />
@@ -649,7 +890,12 @@ function ContentArea({ tab, tabId }: { tab: Tab | undefined; tabId: string }): R
       {tab.pinned && <span className="content-badge pinned">pinned</span>}
       {tab.preview && <span className="content-badge preview">preview</span>}
       {tab.dirty && <span className="content-badge dirty">modified</span>}
-      <button className="content-action" onClick={() => electron.toggleTabDirty(tabId)}>
+      <button
+        className="content-action"
+        onClick={() => {
+          electron.toggleTabDirty(tabId);
+        }}
+      >
         {tab.dirty ? "Save" : "Edit"}
       </button>
     </div>

@@ -11,10 +11,10 @@
 import { test, expect } from "./fixture";
 import type { Page, ElectronApplication } from "@playwright/test";
 
-const TAB_BUTTON = '.tab-button';
+const TAB_BUTTON = ".tab-button";
 
 // Skip entire suite in headless mode — cursor polling doesn't work
-test.skip(({ browserName }) => {
+test.skip(() => {
   return process.env.HEADLESS !== "0";
 }, "Headed-only tests — run with HEADLESS=0");
 
@@ -49,9 +49,12 @@ test.describe("Headed cross-window tab drag", () => {
     const window1Id = await page1.evaluate(() =>
       window.electronAPI.getWindowId(),
     );
-    await page1.evaluate((opts) => {
-      window.electronAPI.testPositionWindow(opts);
-    }, { windowId: window1Id, x: 100, y: 100, width: 800, height: 600 });
+    await page1.evaluate(
+      (opts) => {
+        window.electronAPI.testPositionWindow(opts);
+      },
+      { windowId: window1Id, x: 100, y: 100, width: 800, height: 600 },
+    );
 
     // Get the first mosaic tab button
     const firstTab = page1.locator(TAB_BUTTON).first();
@@ -90,17 +93,23 @@ test.describe("Headed cross-window tab drag", () => {
     const window1Id = await page1.evaluate(() =>
       window.electronAPI.getWindowId(),
     );
-    await page1.evaluate((opts) => {
-      window.electronAPI.testPositionWindow(opts);
-    }, { windowId: window1Id, x: 50, y: 100, width: 600, height: 500 });
+    await page1.evaluate(
+      (opts) => {
+        window.electronAPI.testPositionWindow(opts);
+      },
+      { windowId: window1Id, x: 50, y: 100, width: 600, height: 500 },
+    );
 
     // Create window 2 and position it on the right
     const { page2, window2Id } = await createSecondWindow(electronApp, page1);
     await waitForTabs(page2, 6);
 
-    await page1.evaluate((opts) => {
-      window.electronAPI.testPositionWindow(opts);
-    }, { windowId: window2Id, x: 700, y: 100, width: 600, height: 500 });
+    await page1.evaluate(
+      (opts) => {
+        window.electronAPI.testPositionWindow(opts);
+      },
+      { windowId: window2Id, x: 700, y: 100, width: 600, height: 500 },
+    );
 
     await page1.waitForTimeout(300);
 

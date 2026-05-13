@@ -14,9 +14,8 @@
 import { test, expect, setupSplitLayout } from "./fixture";
 import type { Page, ElectronApplication } from "@playwright/test";
 
-const TAB_BUTTON = '.tab-button';
+const TAB_BUTTON = ".tab-button";
 const TABS_CONTAINER = ".pane";
-
 
 test.beforeEach(async ({ page }) => {
   await setupSplitLayout(page);
@@ -100,7 +99,7 @@ test.describe("Cross-window tab drag", () => {
 
     // Get the first tab's ID and title from IPC state
     const tabIds = await getTabIds(page1);
-    const tabId = tabIds[0]!;
+    const tabId = tabIds[0];
     expect(tabId).not.toBeUndefined();
 
     const tabTitle = await page1.evaluate((id) => {
@@ -153,7 +152,7 @@ test.describe("Cross-window tab drag", () => {
 
     // Get the first tab from window 1
     const tabIds = await getTabIds(page1);
-    const tabId = tabIds[0]!;
+    const tabId = tabIds[0];
     const tabTitle = await page1.evaluate((id) => {
       const state = window.electronAPI.getInitialState();
       return state?.tabs[id]?.title ?? "unknown";
@@ -193,9 +192,11 @@ test.describe("Cross-window tab drag", () => {
     await expect(page2.locator(TAB_BUTTON)).toHaveCount(7);
 
     // The moved tab's title should appear in window 2
-    const window2Titles = await page2.locator(TAB_BUTTON).evaluateAll(
-      (els) => els.map((e) => e.querySelector(".tab-title")?.textContent),
-    );
+    const window2Titles = await page2
+      .locator(TAB_BUTTON)
+      .evaluateAll((els) =>
+        els.map((e) => e.querySelector(".tab-title")?.textContent),
+      );
     expect(window2Titles.some((t) => t?.includes(tabTitle))).toBe(true);
   });
 
@@ -210,7 +211,7 @@ test.describe("Cross-window tab drag", () => {
 
     // Get the first tab from the state
     const tabIds = await getTabIds(page1);
-    const tabId = tabIds[0]!;
+    const tabId = tabIds[0];
 
     // Drive cross-window tear-off
     await page1.evaluate((id) => {
@@ -244,7 +245,7 @@ test.describe("Cross-window tab drag", () => {
 
     // Begin drag
     const tabIds = await getTabIds(page1);
-    const tabId = tabIds[0]!;
+    const tabId = tabIds[0];
 
     await page1.evaluate((id) => {
       window.electronAPI.tabDragBegin({
@@ -284,7 +285,7 @@ test.describe("Cross-window tab drag", () => {
       const layout = state.layout as Record<string, unknown>;
       if (layout.type !== "split") return [];
       const children = layout.children as Record<string, unknown>[];
-      const first = children[0] as Record<string, unknown>;
+      const first = children[0];
       if (first.type === "pane") return first.tabIds as string[];
       if (first.type === "tabs") {
         // MosaicTabsNode — shouldn't happen since we get raw layout from main
@@ -329,7 +330,9 @@ test.describe("Cross-window tab drag", () => {
   }) => {
     await waitForTabs(page1, 6);
 
-    const page1WindowId = await page1.evaluate(() => window.electronAPI.getWindowId());
+    const page1WindowId = await page1.evaluate(() =>
+      window.electronAPI.getWindowId(),
+    );
     const [tabId] = await getTabIds(page1);
     expect(tabId).not.toBeUndefined();
 
@@ -347,19 +350,24 @@ test.describe("Cross-window tab drag", () => {
     await electronApp.waitForEvent("window", { timeout: 15_000 });
     const page2 = electronApp.windows().find((w) => w !== page1)!;
     await waitForTabs(page2, 1);
-    const page2WindowId = await page2.evaluate(() => window.electronAPI.getWindowId());
+    const page2WindowId = await page2.evaluate(() =>
+      window.electronAPI.getWindowId(),
+    );
     const [returningTabId] = await getTabIds(page2);
     expect(returningTabId).not.toBeUndefined();
 
-    await page2.evaluate((data) => {
-      window.electronAPI.tabDragBegin({
-        windowId: data.sourceWindowId,
-        tabId: data.tabId,
-        tabTitle: "test",
-        tabColour: "#fff",
-        tabBounds: { x: 0, y: 0, width: 100, height: 30 },
-      });
-    }, { sourceWindowId: page2WindowId, tabId: returningTabId });
+    await page2.evaluate(
+      (data) => {
+        window.electronAPI.tabDragBegin({
+          windowId: data.sourceWindowId,
+          tabId: data.tabId,
+          tabTitle: "test",
+          tabColour: "#fff",
+          tabBounds: { x: 0, y: 0, width: 100, height: 30 },
+        });
+      },
+      { sourceWindowId: page2WindowId, tabId: returningTabId },
+    );
 
     await page1.evaluate((targetWindowId) => {
       window.electronAPI.dragTargetEnter(targetWindowId);
@@ -378,7 +386,9 @@ test.describe("Cross-window tab drag", () => {
       window.electronAPI.tabDragEnd(true);
     });
 
-    await expect.poll(() => electronApp.windows().length, { timeout: 10_000 }).toBe(1);
+    await expect
+      .poll(() => electronApp.windows().length, { timeout: 10_000 })
+      .toBe(1);
     await expect(page1.locator(TAB_BUTTON)).toHaveCount(6);
   });
 });

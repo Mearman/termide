@@ -4,10 +4,14 @@
 export interface ElectronAPI {
   getWindowId: () => number;
   getInitialState: () => WindowStateFromMain | undefined;
-  onStateUpdated: (callback: (state: WindowStateFromMain) => void) => () => void;
+  onStateUpdated: (
+    callback: (state: WindowStateFromMain) => void,
+  ) => () => void;
   onDragEnter: (callback: (data: { tabId: string }) => void) => () => void;
   onDragLeave: (callback: () => void) => () => void;
-  onDragCursor: (callback: (pos: { clientX: number; clientY: number }) => void) => () => void;
+  onDragCursor: (
+    callback: (pos: { clientX: number; clientY: number }) => void,
+  ) => () => void;
   tabMovedIntra: (data: { windowId: number; layout: LayoutNode }) => void;
   toggleTabPin: (tabId: string) => void;
   /** Open a tab by title (preview model: replaces current preview, pins if already open). */
@@ -29,7 +33,13 @@ export interface ElectronAPI {
   // Test-only APIs
   testCreateWindow: () => Promise<number>;
   testSetDragTarget: (windowId: number | undefined) => number | undefined;
-  testPositionWindow: (opts: { windowId: number; x: number; y: number; width: number; height: number }) => boolean;
+  testPositionWindow: (opts: {
+    windowId: number;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }) => boolean;
   testSetSplitLayout: (windowId: number) => boolean;
 }
 

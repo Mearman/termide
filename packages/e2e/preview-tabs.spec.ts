@@ -9,9 +9,8 @@
  */
 import { test, expect, setupSplitLayout } from "./fixture";
 
-const TAB_BUTTON = '.tab-button';
+const TAB_BUTTON = ".tab-button";
 const TABS_CONTAINER = ".pane";
-
 
 test.beforeEach(async ({ page }) => {
   await setupSplitLayout(page);
@@ -82,7 +81,9 @@ test.describe("Tab opening and preview model", () => {
 
     // The preview tab should have italic styling (rendered via renderTabTitle)
     // Check that a tab with "preview-file.ts" exists
-    const previewTab = page.locator(TAB_BUTTON).filter({ hasText: "preview-file.ts" });
+    const previewTab = page
+      .locator(TAB_BUTTON)
+      .filter({ hasText: "preview-file.ts" });
     await expect(previewTab).toBeVisible({ timeout: 3_000 });
   });
 
@@ -97,7 +98,7 @@ test.describe("Tab opening and preview model", () => {
       const layout = state.layout as Record<string, unknown>;
       if (layout.type === "split") {
         const children = layout.children as Record<string, unknown>[];
-        const first = children[0] as Record<string, unknown>;
+        const first = children[0];
         if (first.type === "pane") {
           return (first.tabIds as string[])[0] ?? "";
         }

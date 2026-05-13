@@ -1,17 +1,37 @@
 /**
  * Main process entry point. Orchestrates window creation, state, and drag coordination.
  */
-import { app, BrowserWindow, ipcMain, screen } from "electron";
+import { app, BrowserWindow, ipcMain } from "electron";
 
 // Enable headless mode when launched with --headless flag (for E2E tests)
-if (process.argv.includes("--headless=new") || process.argv.includes("--headless")) {
+if (
+  process.argv.includes("--headless=new") ||
+  process.argv.includes("--headless")
+) {
   app.commandLine.appendSwitch("headless", "new");
 }
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createMainWindow, createWindowWithTab } from "./window-manager.ts";
-import { appState, updateWindowLayout, moveTabCrossWindow, registerWindow, toggleTabPin, openTabInWindow, pushStateToWindow } from "./state.ts";
-import { startDrag, endDrag, setDragTargetForTest, getDragTargetForTest, reportDragTargetEnter, reportDragTargetLeave, setTargetPaneId, cleanupDragCoordinator } from "./drag-coordinator.ts";
+import {
+  appState,
+  updateWindowLayout,
+  moveTabCrossWindow,
+  registerWindow,
+  toggleTabPin,
+  openTabInWindow,
+  pushStateToWindow,
+} from "./state.ts";
+import {
+  startDrag,
+  endDrag,
+  setDragTargetForTest,
+  getDragTargetForTest,
+  reportDragTargetEnter,
+  reportDragTargetLeave,
+  setTargetPaneId,
+  cleanupDragCoordinator,
+} from "./drag-coordinator.ts";
 import type { TabMovedIntraPayload, DragTabStartPayload } from "./types.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -20,7 +40,12 @@ const CROSS_WINDOW_SPLIT_EDGE_RATIO = 0.25;
 
 type CrossWindowDropResolution =
   | { kind: "insert"; paneId: string }
-  | { kind: "split"; paneId: string; direction: "row" | "column"; side: "before" | "after" };
+  | {
+      kind: "split";
+      paneId: string;
+      direction: "row" | "column";
+      side: "before" | "after";
+    };
 
 function preloadPathForTest(): string {
   return path.join(mainPackage, "dist", "preload.iife.js");
@@ -35,7 +60,8 @@ ipcMain.on("get-window-id", (event): void => {
 
 ipcMain.on("get-initial-state", (event): void => {
   const win = BrowserWindow.fromWebContents(event.sender);
-  event.returnValue = win !== null && win !== undefined ? appState.windows[win.id] : undefined;
+  event.returnValue =
+    win !== null && win !== undefined ? appState.windows[win.id] : undefined;
 });
 
 ipcMain.on("tab-moved-intra", (_event, payload: TabMovedIntraPayload): void => {
@@ -66,7 +92,9 @@ ipcMain.on("toggle-tab-dirty", (event, tabId: string): void => {
 });
 
 ipcMain.on("tab-drag-begin", (_event, payload: DragTabStartPayload): void => {
-  startDrag(payload, handleDragComplete);
+  startDrag(payload, (result) => {
+    void handleDragComplete(result);
+  });
 });
 
 ipcMain.on("tab-drag-end", (_event, completed: boolean): void => {
@@ -97,20 +125,24 @@ async function handleDragComplete(result: {
   cursorPosition: { x: number; y: number };
 }): Promise<void> {
   if (result.targetWindowId !== undefined) {
-    const dropResolution = await resolveCrossWindowDrop(result.targetWindowId, result.cursorPosition);
+    const dropResolution = await resolveCrossWindowDrop(
+      result.targetWindowId,
+      result.cursorPosition,
+    );
     const affected = moveTabCrossWindow(
       result.tabId,
       result.sourceWindowId,
       result.targetWindowId,
       {
         targetPaneId: dropResolution?.paneId ?? result.targetPaneId,
-        splitTarget: dropResolution?.kind === "split"
-          ? {
-              paneId: dropResolution.paneId,
-              direction: dropResolution.direction,
-              side: dropResolution.side,
-            }
-          : undefined,
+        splitTarget:
+          dropResolution?.kind === "split"
+            ? {
+                paneId: dropResolution.paneId,
+                direction: dropResolution.direction,
+                side: dropResolution.side,
+              }
+            : undefined,
       },
     );
     pushStateToWindows(affected.affectedWindows);
@@ -140,7 +172,12 @@ async function resolveCrossWindowDrop(
   const bounds = win.getContentBounds();
   const clientX = cursorPosition.x - bounds.x;
   const clientY = cursorPosition.y - bounds.y;
-  if (clientX < 0 || clientY < 0 || clientX > bounds.width || clientY > bounds.height) {
+  if (
+    clientX < 0 ||
+    clientY < 0 ||
+    clientX > bounds.width ||
+    clientY > bounds.height
+  ) {
     return undefined;
   }
 
@@ -164,7 +201,7 @@ async function resolveCrossWindowDrop(
         { zone: "bottom", distance: 1 - ry },
       ];
       const closest = distances.reduce((a, b) => a.distance < b.distance ? a : b);
-      if (closest.distance < ${CROSS_WINDOW_SPLIT_EDGE_RATIO}) {
+      if (closest.distance < ${String(CROSS_WINDOW_SPLIT_EDGE_RATIO)})) {
         if (closest.zone === "left") return { kind: "split", paneId, direction: "row", side: "before" };
         if (closest.zone === "right") return { kind: "split", paneId, direction: "row", side: "after" };
         if (closest.zone === "top") return { kind: "split", paneId, direction: "column", side: "before" };
@@ -176,7 +213,10 @@ async function resolveCrossWindowDrop(
   })()`;
 
   try {
-    const value: unknown = await win.webContents.executeJavaScript(script, true);
+    const value: unknown = await win.webContents.executeJavaScript(
+      script,
+      true,
+    );
     return isCrossWindowDropResolution(value) ? value : undefined;
   } catch (error) {
     console.error("Failed to resolve cross-window drop", error);
@@ -184,10 +224,13 @@ async function resolveCrossWindowDrop(
   }
 }
 
-function isCrossWindowDropResolution(value: unknown): value is CrossWindowDropResolution {
+function isCrossWindowDropResolution(
+  value: unknown,
+): value is CrossWindowDropResolution {
   if (typeof value !== "object" || value === null) return false;
   if (!("kind" in value) || !("paneId" in value)) return false;
-  if (typeof value.paneId !== "string" || value.paneId.length === 0) return false;
+  if (typeof value.paneId !== "string" || value.paneId.length === 0)
+    return false;
   if (value.kind === "insert") return true;
   if (value.kind !== "split") return false;
   if (!("direction" in value) || !("side" in value)) return false;
@@ -231,7 +274,7 @@ function pushStateToWindows(windowIds: number[]): void {
 // These exist solely for E2E tests to control cross-window behaviour
 // without relying on OS-level cursor movement (which doesn't work headlessly).
 
-ipcMain.handle("test-create-window", async (_event): Promise<number> => {
+ipcMain.handle("test-create-window", (_event): number => {
   const win = new BrowserWindow({
     width: 800,
     height: 600,
@@ -250,9 +293,9 @@ ipcMain.handle("test-create-window", async (_event): Promise<number> => {
 
   const RENDERER_URL = process.env.RENDERER_URL ?? "http://localhost:5173";
   if (!RENDERER_URL.startsWith("file://")) {
-    win.loadURL(RENDERER_URL);
+    void win.loadURL(RENDERER_URL);
   } else {
-    win.loadFile(
+    void win.loadFile(
       path.join(
         path.dirname(fileURLToPath(import.meta.url)),
         "..",
@@ -268,39 +311,72 @@ ipcMain.handle("test-create-window", async (_event): Promise<number> => {
 });
 
 /** Override the drag coordinator's hovered window for testing. Returns the value set. */
-ipcMain.on("test-set-drag-target", (event, windowId: number | undefined): void => {
-  setDragTargetForTest(windowId);
-  // Return the actual hoveredWindowId for verification
-  const actual = getDragTargetForTest();
-  event.returnValue = actual;
-});
+ipcMain.on(
+  "test-set-drag-target",
+  (event, windowId: number | undefined): void => {
+    setDragTargetForTest(windowId);
+    // Return the actual hoveredWindowId for verification
+    const actual = getDragTargetForTest();
+    event.returnValue = actual;
+  },
+);
 
 /** Move a window to specific screen coordinates for headed tests. */
-ipcMain.on("test-position-window", (
-  event,
-  opts: { windowId: number; x: number; y: number; width: number; height: number },
-): void => {
-  const win = BrowserWindow.fromId(opts.windowId);
-  if (win !== null && !win.isDestroyed()) {
-    win.setBounds({ x: opts.x, y: opts.y, width: opts.width, height: opts.height });
-  }
-  event.returnValue = true;
-});
+ipcMain.on(
+  "test-position-window",
+  (
+    event,
+    opts: {
+      windowId: number;
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    },
+  ): void => {
+    const win = BrowserWindow.fromId(opts.windowId);
+    if (win !== null && !win.isDestroyed()) {
+      win.setBounds({
+        x: opts.x,
+        y: opts.y,
+        width: opts.width,
+        height: opts.height,
+      });
+    }
+    event.returnValue = true;
+  },
+);
 
 /** Convert a window's layout to a split (for tests needing 2-pane setup). */
 ipcMain.on("test-set-split-layout", (event, windowId: number): void => {
   const ws = appState.windows[windowId];
-  if (ws === undefined) { event.returnValue = false; return; }
+  if (ws === undefined) {
+    event.returnValue = false;
+    return;
+  }
   const tabIds = ws.layout.type === "pane" ? ws.layout.tabIds : [];
-  if (tabIds.length < 2) { event.returnValue = false; return; }
+  if (tabIds.length < 2) {
+    event.returnValue = false;
+    return;
+  }
   const mid = Math.ceil(tabIds.length / 2);
   ws.layout = {
     type: "split",
     direction: "row",
     sizes: [50, 50],
     children: [
-      { type: "pane", tabIds: tabIds.slice(0, mid), pinnedTabIds: [], activeTabId: tabIds[0]! },
-      { type: "pane", tabIds: tabIds.slice(mid), pinnedTabIds: [], activeTabId: tabIds[mid]! },
+      {
+        type: "pane",
+        tabIds: tabIds.slice(0, mid),
+        pinnedTabIds: [],
+        activeTabId: tabIds[0],
+      },
+      {
+        type: "pane",
+        tabIds: tabIds.slice(mid),
+        pinnedTabIds: [],
+        activeTabId: tabIds[mid],
+      },
     ],
   };
   pushStateToWindow(windowId);

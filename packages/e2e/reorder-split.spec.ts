@@ -1,8 +1,7 @@
 import { test, expect, setupSplitLayout } from "./fixture";
 
-const TAB_BUTTON = '.tab-button';
+const TAB_BUTTON = ".tab-button";
 const TABS_CONTAINER = ".pane";
-
 
 test.beforeEach(async ({ page }) => {
   await setupSplitLayout(page);
@@ -24,7 +23,9 @@ test.describe("Tab reordering within a pane", () => {
     await expect(tabs).toHaveCount(3);
   });
 
-  test("tab count stays the same after drag within tab group", async ({ page }) => {
+  test("tab count stays the same after drag within tab group", async ({
+    page,
+  }) => {
     await page.waitForLoadState("domcontentloaded");
     await page.locator(TAB_BUTTON).first().waitFor({ timeout: 10_000 });
 
@@ -48,7 +49,6 @@ test.describe("Tab reordering within a pane", () => {
   });
 });
 
-
 test.beforeEach(async ({ page }) => {
   await setupSplitLayout(page);
 });
@@ -64,7 +64,9 @@ test.describe("Dynamic pane splitting", () => {
     await expect(split).toBeVisible();
   });
 
-  test("dragging a tab to a different pane creates a split", async ({ page }) => {
+  test("dragging a tab to a different pane creates a split", async ({
+    page,
+  }) => {
     await page.waitForLoadState("domcontentloaded");
     await page.locator(TAB_BUTTON).first().waitFor({ timeout: 10_000 });
 
@@ -103,9 +105,16 @@ test.describe("Dynamic pane splitting", () => {
     expect(splitBox).not.toBeNull();
 
     // Drag split handle 50px to the right
-    await page.mouse.move(splitBox!.x + splitBox!.width / 2, splitBox!.y + splitBox!.height / 2);
+    await page.mouse.move(
+      splitBox!.x + splitBox!.width / 2,
+      splitBox!.y + splitBox!.height / 2,
+    );
     await page.mouse.down();
-    await page.mouse.move(splitBox!.x + splitBox!.width / 2 + 50, splitBox!.y + splitBox!.height / 2, { steps: 5 });
+    await page.mouse.move(
+      splitBox!.x + splitBox!.width / 2 + 50,
+      splitBox!.y + splitBox!.height / 2,
+      { steps: 5 },
+    );
     await page.mouse.up();
 
     // Tile widths should have changed

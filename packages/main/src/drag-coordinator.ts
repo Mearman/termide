@@ -143,7 +143,9 @@ export function startDrag(
     cancelDrag();
   }
 
-  const pollInterval = setInterval(() => tick(), 16);
+  const pollInterval = setInterval(() => {
+    tick();
+  }, 16);
   // Don't let the poll interval prevent process exit
   pollInterval.unref();
 
@@ -178,10 +180,7 @@ export function endDrag(completed: boolean): void {
   const cursor = screen.getCursorScreenPoint();
   let targetId = activeDrag.hoveredWindowId;
 
-  if (targetId === undefined) {
-    // No broadcast or polling detected a target — one-shot check
-    targetId = findWindowAtPoint(cursor, activeDrag.sourceWindowId);
-  }
+  targetId ??= findWindowAtPoint(cursor, activeDrag.sourceWindowId);
 
   const result: DragResult = {
     tabId: activeDrag.tabId,
@@ -215,7 +214,10 @@ export function cleanupDragCoordinator(): void {
 function teardown(): void {
   if (activeDrag === undefined) return;
   clearInterval(activeDrag.pollInterval);
-  if (activeDrag.ghostWindow !== undefined && !activeDrag.ghostWindow.isDestroyed()) {
+  if (
+    activeDrag.ghostWindow !== undefined &&
+    !activeDrag.ghostWindow.isDestroyed()
+  ) {
     activeDrag.ghostWindow.destroy(); // Use destroy() instead of close() for immediate cleanup
   }
   activeDrag = undefined;
@@ -246,7 +248,10 @@ function updateGhostWindow(cursor: { x: number; y: number }): void {
   if (activeDrag === undefined) return;
 
   const sourceWin = BrowserWindow.fromId(activeDrag.sourceWindowId);
-  const isOverSource = sourceWin !== null && !sourceWin.isDestroyed() && isPointInBounds(cursor, sourceWin.getBounds());
+  const isOverSource =
+    sourceWin !== null &&
+    !sourceWin.isDestroyed() &&
+    isPointInBounds(cursor, sourceWin.getBounds());
   const isOverTarget = activeDrag.hoveredWindowId !== undefined;
 
   const outsideSource = !isOverSource && !isOverTarget;
@@ -279,7 +284,7 @@ function updateGhostWindow(cursor: { x: number; y: number }): void {
         contextIsolation: true,
       },
     });
-    activeDrag.ghostWindow.loadURL(
+    void activeDrag.ghostWindow.loadURL(
       `data:text/html;charset=utf-8,${encodeURIComponent(buildGhostHTML(activeDrag.ghostPayload))}`,
     );
   }
@@ -304,7 +309,10 @@ function updateGhostWindow(cursor: { x: number; y: number }): void {
   }
 }
 
-function isPointInBounds(point: { x: number; y: number }, bounds: Electron.Rectangle): boolean {
+function isPointInBounds(
+  point: { x: number; y: number },
+  bounds: Electron.Rectangle,
+): boolean {
   return (
     point.x >= bounds.x &&
     point.x <= bounds.x + bounds.width &&
@@ -334,7 +342,7 @@ function buildGhostHTML(payload: DragTabStartPayload): string {
     align-items: center;
     gap: 8px;
     padding: 8px 14px;
-    height: ${GHOST_HEIGHT}px;
+    height: ${String(GHOST_HEIGHT)}px;
     background: rgba(69, 71, 90, 0.92);
     border: 1px solid rgba(137, 180, 250, 0.4);
     border-radius: 6px;

@@ -1,19 +1,15 @@
 /**
  * Window creation and management.
  */
-import {
-  BrowserWindow,
-  type Point,
-} from "electron";
+import { BrowserWindow, type Point } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { registerWindow, createWindowForTab, appState } from "./state.ts";
+import { registerWindow, createWindowForTab } from "./state.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const mainPackage = path.resolve(__dirname, "..");
 
-const RENDERER_URL =
-  process.env.RENDERER_URL ?? "http://localhost:5173";
+const RENDERER_URL = process.env.RENDERER_URL ?? "http://localhost:5173";
 
 const isDev = !RENDERER_URL.startsWith("file://");
 
@@ -37,9 +33,11 @@ export function createMainWindow(): BrowserWindow {
   registerWindow(win.id);
 
   if (isDev) {
-    win.loadURL(RENDERER_URL);
+    void win.loadURL(RENDERER_URL);
   } else {
-    win.loadFile(path.join(mainPackage, "..", "renderer", "dist", "index.html"));
+    void win.loadFile(
+      path.join(mainPackage, "..", "renderer", "dist", "index.html"),
+    );
   }
 
   return win;
@@ -67,9 +65,11 @@ export function createWindowWithTab(
   createWindowForTab(tabId, fromWindowId, win.id);
 
   if (isDev) {
-    win.loadURL(RENDERER_URL);
+    void win.loadURL(RENDERER_URL);
   } else {
-    win.loadFile(path.join(mainPackage, "..", "renderer", "dist", "index.html"));
+    void win.loadFile(
+      path.join(mainPackage, "..", "renderer", "dist", "index.html"),
+    );
   }
 
   return win;
