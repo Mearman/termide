@@ -15,6 +15,6 @@
     "typescript": "^6.0"
   },
   "dependencies": {
-    "electron": "^42.0"
+    "electron": "^42.5"
   }
 }
