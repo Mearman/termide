@@ -304,11 +304,16 @@ test.describe("Cross-window tab drag", () => {
         });
       }, tabId);
 
+      // Listen before ending the drag: the new window can open before the
+      // evaluate call returns.
+      const windowOpened = electronApp.waitForEvent("window", {
+        timeout: 15_000,
+      });
       await page1.evaluate(() => {
         window.electronAPI.tabDragEnd(true);
       });
 
-      await electronApp.waitForEvent("window", { timeout: 15_000 });
+      await windowOpened;
       await page1.waitForTimeout(300);
     }
 
