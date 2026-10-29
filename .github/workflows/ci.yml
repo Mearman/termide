@@ -39,7 +39,7 @@ jobs:
         run: cd packages/e2e && npx playwright install --with-deps
 
       - name: Run E2E tests
-        run: cd packages/e2e && npx playwright test
+        run: cd packages/e2e && ${{ runner.os == 'Linux' && 'xvfb-run -a ' || '' }}npx playwright test
         env:
           CI: true
 
