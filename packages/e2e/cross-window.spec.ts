@@ -314,6 +314,18 @@ test.describe("Cross-window tab drag", () => {
       });
 
       await windowOpened;
+
+      // A torn-off window opens centred on the cursor, which does not move
+      // between iterations, so the next drag would end inside it and drop
+      // the tab there instead of tearing it off. Shift every window except
+      // the source clear of the cursor.
+      await electronApp.evaluate(({ BrowserWindow, screen }, sourceId) => {
+        const cursor = screen.getCursorScreenPoint();
+        for (const win of BrowserWindow.getAllWindows()) {
+          if (win.id === sourceId) continue;
+          win.setBounds({ ...win.getBounds(), x: cursor.x + 1 });
+        }
+      }, 1);
       await page1.waitForTimeout(300);
     }
 
