@@ -1,5 +1,7 @@
 # Electron Tab Drag Prototype
 
+[![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/Mearman/termide) [![CI](https://img.shields.io/github/actions/workflow/status/Mearman/termide/ci.yml?branch=main)](https://github.com/Mearman/termide/actions)
+
 A prototype Electron application demonstrating VSCode-style tab and pane management — intra-window split panes, inter-window tab dragging, preview tabs, pinning, and more. Built as a research artefact for evaluating multi-window tab dragging approaches in TypeScript desktop applications.
 
 ## Architecture
